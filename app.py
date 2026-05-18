@@ -89,11 +89,11 @@ def tg_send(chat_id, text, reply_markup=None):
 
 
 def tg_send_photo(chat_id, photo_url, caption=None):
-    """Gửi ảnh (QR code) kèm caption tới user."""
+    """Gửi ảnh (QR code) kèm caption HTML tới user."""
     payload = {
         "chat_id": chat_id,
         "photo": photo_url,
-        "parse_mode": "Markdown",
+        "parse_mode": "HTML",
     }
     if caption:
         payload["caption"] = caption
@@ -164,26 +164,34 @@ def handle_mua(chat_id, sku):
         eta = ("⏱ Tác giả xác nhận thủ công trong 30 phút "
                "(giờ làm việc 9:00–22:00 hàng ngày).")
 
+    # Caption HTML (an toàn hơn Markdown vì underscore trong /lien_he không phá parser)
     caption = (
-        f"*Đơn hàng #{code}* — {prod['price']:,}đ\n"
-        f"Sản phẩm: *{prod['name']}*\n\n"
-        f"*📱 Cách 1 — QUÉT QR (nhanh nhất):*\n"
+        f"<b>Đơn hàng #{code}</b> — {prod['price']:,}đ\n"
+        f"Sản phẩm: <b>{prod['name']}</b>\n\n"
+        f"<b>📱 Cách 1 — Quét QR (nhanh nhất):</b>\n"
         f"Mở app ngân hàng (VCB / MB / MoMo / ZaloPay…) → bấm Quét QR → quét ảnh trên.\n"
-        f"App tự fill số TK + số tiền + nội dung. Bạn chỉ xác nhận chuyển.\n\n"
-        f"*✍️ Cách 2 — Chuyển thủ công:*\n"
-        f"NH: *{BANK_NAME}*\n"
-        f"STK: `{BANK_ACCOUNT}`\n"
-        f"Chủ TK: *{BANK_OWNER}*\n"
-        f"Nội dung: `{ck_content}`\n\n"
+        f"App tự điền STK, số tiền và nội dung. Bạn chỉ xác nhận chuyển.\n\n"
+        f"<b>✍️ Cách 2 — Chuyển thủ công:</b>\n"
+        f"Ngân hàng: <b>{BANK_NAME}</b>\n"
+        f"STK: <code>{BANK_ACCOUNT}</code>\n"
+        f"Chủ TK: <b>{BANK_OWNER}</b>\n"
+        f"Nội dung: <code>{ck_content}</code>\n\n"
         f"{eta}\n"
-        f"_Cần hỗ trợ? Gõ /lien\\_he_"
+        f"<i>Cần hỗ trợ? Gõ /lien_he</i>"
     )
 
     ok = tg_send_photo(chat_id, qr_url, caption)
     if not ok:
-        # Fallback nếu VietQR API lỗi / Telegram không load được
+        # Fallback: gửi plain text nếu QR/HTML fail
         tg_send(chat_id,
-                caption + "\n\n_(QR tạm thời lỗi — vui lòng chuyển khoản thủ công theo thông tin trên)_")
+                f"Đơn hàng #{code} — {prod['price']:,}đ\n\n"
+                f"Chuyển khoản:\n"
+                f"NH: {BANK_NAME}\n"
+                f"STK: {BANK_ACCOUNT}\n"
+                f"Chủ TK: {BANK_OWNER}\n"
+                f"Số tiền: {prod['price']:,}đ\n"
+                f"Nội dung: {ck_content}\n\n"
+                f"(QR tạm thời lỗi, vui lòng chuyển thủ công theo thông tin trên)")
 
     log.info(f"Created order {code} for chat {chat_id} sku={sku}")
 
