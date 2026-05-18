@@ -129,14 +129,14 @@ def tg_keyboard():
 def handle_start(chat_id, first_name):
     text = (
         f"Xin chào *{first_name}*,\n\n"
-        "Tôi là trợ lý mua hàng tự động của *Tạ Quang Thuận — AI Thực Chiến*.\n\n"
+        "Tôi là trợ lý bán hàng tự động của CEO *Tạ Quang Thuận — AI Thực Chiến*.\n\n"
         "Bộ sản phẩm hiện có:\n\n"
         "*Combo Full Pack* — 199.000đ (tiết kiệm 49k)\n"
         "  └ Trọn bộ Claude + OpenCode, 8 cấp độ\n\n"
         "*Claude AI Thực Chiến* — 99.000đ\n"
         "  └ Cho dân văn phòng, sinh viên, không cần biết code\n\n"
         "*OpenCode Thực Chiến* — 149.000đ\n"
-        "  └ Cho developer, tech lead\n\n"
+        "  └ Cho developer, tech lead, Cho dân văn phòng, sinh viên, không cần biết code\n\n"
         "Chọn sản phẩm bên dưới hoặc gõ:\n"
         "/mua\\_combo — mua combo\n"
         "/mua\\_claude — mua Claude\n"
