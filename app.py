@@ -34,6 +34,10 @@ log = logging.getLogger(__name__)
 app = Flask(__name__)
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# Init DB ngay khi module load (cho gunicorn, không chỉ __main__)
+init_db()
+log.info("Database initialized.")
+
 
 # ============================================================
 # TELEGRAM HELPERS
@@ -450,7 +454,6 @@ def notify_admin_unmatched(amount, content, ref, reason):
 # ============================================================
 
 if __name__ == "__main__":
-    init_db()
     port = int(os.environ.get("PORT", 8000))
     log.info(f"Starting bot server on port {port}")
     log.info(f"BASE_URL: {BASE_URL}")
