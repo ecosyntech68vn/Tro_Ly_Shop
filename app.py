@@ -12,6 +12,7 @@ Tác giả: Tạ Quang Thuận · AI Thực Chiến · 2026
 
 import os
 import logging
+from urllib.parse import quote
 from flask import Flask, request, jsonify, abort
 import requests
 
@@ -33,6 +34,32 @@ log = logging.getLogger(__name__)
 
 app = Flask(__name__)
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
+
+# VietQR — chuẩn QR thanh toán Napas, mọi app banking VN quét được.
+# BIN code cho từng ngân hàng tại: https://api.vietqr.io/v2/banks
+BANK_BINS = {
+    "Vietcombank": "970436", "VCB": "970436",
+    "MB Bank": "970422", "MBBank": "970422", "MB": "970422",
+    "Techcombank": "970407", "TCB": "970407",
+    "BIDV": "970418",
+    "VietinBank": "970415", "CTG": "970415",
+    "ACB": "970416",
+    "TPBank": "970423", "TPB": "970423",
+    "MSB": "970426",
+    "OCB": "970448",
+    "Sacombank": "970403", "STB": "970403",
+    "VPBank": "970432", "VPB": "970432",
+}
+
+def build_vietqr_url(amount, content):
+    """Tạo URL ảnh QR thanh toán VietQR cho 1 đơn."""
+    bin_code = BANK_BINS.get(BANK_NAME, "970436")  # default VCB
+    return (
+        f"https://img.vietqr.io/image/{bin_code}-{BANK_ACCOUNT}-compact2.png"
+        f"?amount={amount}"
+        f"&addInfo={quote(content)}"
+        f"&accountName={quote(BANK_OWNER)}"
+    )
 
 # Init DB ngay khi module load (cho gunicorn, không chỉ __main__)
 init_db()
@@ -59,6 +86,26 @@ def tg_send(chat_id, text, reply_markup=None):
             log.error(f"Telegram send failed: {r.status_code} {r.text}")
     except Exception as e:
         log.exception(f"Telegram send exception: {e}")
+
+
+def tg_send_photo(chat_id, photo_url, caption=None):
+    """Gửi ảnh (QR code) kèm caption tới user."""
+    payload = {
+        "chat_id": chat_id,
+        "photo": photo_url,
+        "parse_mode": "Markdown",
+    }
+    if caption:
+        payload["caption"] = caption
+    try:
+        r = requests.post(f"{TG_API}/sendPhoto", json=payload, timeout=15)
+        if not r.ok:
+            log.error(f"Telegram sendPhoto failed: {r.status_code} {r.text}")
+            return False
+        return True
+    except Exception as e:
+        log.exception(f"Telegram sendPhoto exception: {e}")
+        return False
 
 
 def tg_keyboard():
@@ -100,36 +147,44 @@ def handle_start(chat_id, first_name):
 
 
 def handle_mua(chat_id, sku):
-    """Tạo đơn hàng mới và gửi hướng dẫn chuyển khoản."""
+    """Tạo đơn hàng mới + gửi QR thanh toán + hướng dẫn."""
     if sku not in PRODUCTS:
         tg_send(chat_id, "Sản phẩm không tồn tại. Gõ /start để xem menu.")
         return
 
     prod = PRODUCTS[sku]
     code = create_order(chat_id, sku, prod["price"])
+    ck_content = f"MUA {code}"
+    qr_url = build_vietqr_url(prod["price"], ck_content)
 
-    # Câu chốt khác nhau tuỳ chế độ
+    # ETA tuỳ chế độ
     if SEPAY_API_KEY:
-        eta = "Sau khi chuyển, bạn nhận link tải trong vòng 30 giây (tự động)."
+        eta = "⏱ Bot tự động gửi link tải trong 30 giây sau khi nhận tiền."
     else:
-        eta = ("Sau khi chuyển, vui lòng đợi tác giả xác nhận thủ công.\n"
-               "Thời gian xác nhận: 9:00–22:00 hàng ngày (trung bình dưới 30 phút).")
+        eta = ("⏱ Tác giả xác nhận thủ công trong 30 phút "
+               "(giờ làm việc 9:00–22:00 hàng ngày).")
 
-    text = (
-        f"*Đơn hàng #{code}*\n\n"
-        f"Sản phẩm: *{prod['name']}*\n"
-        f"Số tiền: *{prod['price']:,}đ*\n\n"
-        f"*Hướng dẫn chuyển khoản:*\n"
-        f"Ngân hàng: *{BANK_NAME}*\n"
-        f"Số TK: `{BANK_ACCOUNT}`\n"
+    caption = (
+        f"*Đơn hàng #{code}* — {prod['price']:,}đ\n"
+        f"Sản phẩm: *{prod['name']}*\n\n"
+        f"*📱 Cách 1 — QUÉT QR (nhanh nhất):*\n"
+        f"Mở app ngân hàng (VCB / MB / MoMo / ZaloPay…) → bấm Quét QR → quét ảnh trên.\n"
+        f"App tự fill số TK + số tiền + nội dung. Bạn chỉ xác nhận chuyển.\n\n"
+        f"*✍️ Cách 2 — Chuyển thủ công:*\n"
+        f"NH: *{BANK_NAME}*\n"
+        f"STK: `{BANK_ACCOUNT}`\n"
         f"Chủ TK: *{BANK_OWNER}*\n"
-        f"Số tiền: *{prod['price']:,}đ*\n"
-        f"Nội dung: `MUA {code}`\n\n"
-        f"_Sao chép nội dung CK chính xác để hệ thống nhận diện._\n\n"
+        f"Nội dung: `{ck_content}`\n\n"
         f"{eta}\n"
-        f"Nếu sau 1 giờ chưa nhận, gõ /trang\\_thai hoặc /lien\\_he."
+        f"_Cần hỗ trợ? Gõ /lien\\_he_"
     )
-    tg_send(chat_id, text)
+
+    ok = tg_send_photo(chat_id, qr_url, caption)
+    if not ok:
+        # Fallback nếu VietQR API lỗi / Telegram không load được
+        tg_send(chat_id,
+                caption + "\n\n_(QR tạm thời lỗi — vui lòng chuyển khoản thủ công theo thông tin trên)_")
+
     log.info(f"Created order {code} for chat {chat_id} sku={sku}")
 
 
