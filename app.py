@@ -11,6 +11,7 @@ Tác giả: Tạ Quang Thuận · AI Thực Chiến · 2026
 """
 
 import os
+import re
 import logging
 from urllib.parse import quote
 from flask import Flask, request, jsonify, abort
@@ -496,6 +497,121 @@ def sepay_webhook():
 
     log.info(f"Order {code} delivered to chat {chat_id}, ref={ref}")
     return jsonify({"ok": True, "msg": "Delivered"})
+
+
+@app.route("/vcb-email", methods=["POST"])
+def vcb_email_webhook():
+    """
+    Nhận email biến động số dư VCB từ Google Apps Script.
+    Apps Script chạy mỗi 1 phút, đọc email từ VCB Digibank, POST tới đây.
+
+    Auth: header X-Auth-Token phải khớp env VCB_EMAIL_SECRET
+    Body JSON:
+    {
+      "subject": "VCB Digibank: Biến động số dư...",
+      "body": "Tài khoản: ...\nTăng: +199,000 VND\nNội dung: MUA TXNXXXXXX\n..."
+    }
+    """
+    secret = os.environ.get("VCB_EMAIL_SECRET", "")
+    if not secret:
+        log.warning("VCB_EMAIL_SECRET not set, /vcb-email disabled")
+        return jsonify({"ok": True, "msg": "Disabled"}), 200
+
+    if request.headers.get("X-Auth-Token") != secret:
+        log.warning(f"VCB email webhook unauthorized: {request.headers.get('X-Auth-Token', '')[:10]}...")
+        abort(401)
+
+    data = request.get_json(silent=True) or {}
+    subject = (data.get("subject") or "").lower()
+    body = data.get("body") or ""
+
+    log.info(f"VCB email received: {subject[:60]}")
+
+    # Chỉ xử lý email tiền VÀO (credit, biến động tăng)
+    is_credit = any(kw in body.lower() for kw in [
+        "tăng", "ghi có", "credit", "tien vao", "tiền vào", "phát sinh có",
+    ])
+    if not is_credit:
+        return jsonify({"ok": True, "msg": "Not credit email, skip"}), 200
+
+    # Extract số tiền: tìm pattern "+xxx,xxx VND" hoặc "Số tiền: xxx,xxx"
+    amount = 0
+    # Pattern 1: +199,000 VND
+    m = re.search(r"\+\s*([\d.,]+)\s*VND", body)
+    # Pattern 2: Số tiền: 199,000 / Số tiền: 199.000
+    if not m:
+        m = re.search(r"[Ss]ố tiền[:\s]*([\d.,]+)", body)
+    # Pattern 3: Tăng: 199,000
+    if not m:
+        m = re.search(r"[Tt]ăng[:\s]*([\d.,]+)", body)
+    if m:
+        raw = m.group(1).replace(".", "").replace(",", "")
+        try:
+            amount = int(raw)
+        except ValueError:
+            amount = 0
+
+    if amount == 0:
+        log.warning("VCB email: cannot parse amount")
+        return jsonify({"ok": True, "msg": "No amount found"}), 200
+
+    # Extract mã đơn TXN + 6-8 ký tự
+    code_match = re.search(r"TXN[A-Z0-9]{4,10}", body.upper())
+    ref_match = re.search(r"FT\d{10,15}", body.upper())
+    ref = ref_match.group(0) if ref_match else f"VCB-EMAIL-{tx_id_safe()}"
+
+    if not code_match:
+        log_unmatched_payment(ref, amount, body[:200], ref)
+        notify_admin_unmatched(amount, body[:150], ref, reason="Không tìm thấy mã TXN trong email VCB")
+        return jsonify({"ok": True, "msg": "No order code"}), 200
+
+    order_code = code_match.group(0)
+    order = get_pending_order_by_code(order_code)
+    if not order:
+        log_unmatched_payment(ref, amount, body[:200], ref)
+        notify_admin_unmatched(amount, body[:150], ref,
+                               reason=f"Mã {order_code} không tồn tại hoặc đã thanh toán")
+        return jsonify({"ok": True, "msg": "Order not found"}), 200
+
+    code, chat_id, sku, expected_amount, status = order
+
+    # Verify số tiền (cho phép sai số nhỏ ±100đ vì format)
+    if abs(amount - expected_amount) > 100:
+        if amount < expected_amount:
+            log_unmatched_payment(ref, amount, body[:200], ref)
+            notify_admin_unmatched(amount, body[:150], ref,
+                                   reason=f"Thiếu tiền: nhận {amount}, cần {expected_amount} (đơn #{code})")
+            tg_send(chat_id,
+                    f"Đã nhận {amount:,}đ cho đơn #{code} nhưng *thiếu {expected_amount-amount:,}đ*.\n"
+                    f"Vui lòng chuyển bù hoặc liên hệ tác giả.")
+            return jsonify({"ok": True, "msg": "Underpaid"}), 200
+        # Nếu thừa tiền (khách CK dư) → vẫn deliver, log thừa cho admin tự xử lý
+
+    # Match thành công → mark paid + deliver
+    drive_link = get_product_link(sku) or "[Link chưa cập nhật — liên hệ tác giả]"
+    mark_order_paid(code, ref, drive_link)
+
+    prod = PRODUCTS.get(sku, {"name": sku})
+    deliver_text = (
+        f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}*.\n"
+        f"Sản phẩm: *{prod['name']}*\n\n"
+        f"*Link tải:*\n{drive_link}\n\n"
+        f"Cảm ơn bạn đã mua hàng.\n"
+        f"_Mã giao dịch: {ref}_"
+    )
+    tg_send(chat_id, deliver_text)
+
+    if ADMIN_CHAT_ID:
+        tg_send(ADMIN_CHAT_ID, f"AUTO SALE (VCB email): #{code} · {sku} · {amount:,}đ")
+
+    log.info(f"VCB-email: Order {code} auto-delivered, ref={ref}")
+    return jsonify({"ok": True, "msg": "Delivered"}), 200
+
+
+def tx_id_safe():
+    """Generate short unique ID for logging."""
+    import time
+    return str(int(time.time() * 1000))[-8:]
 
 
 def notify_admin_unmatched(amount, content, ref, reason):
