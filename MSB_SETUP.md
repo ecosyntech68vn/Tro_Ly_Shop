@@ -1,0 +1,208 @@
+# MSB + SEPAY · NÂNG CẤP TỪ MANUAL LÊN TỰ ĐỘNG
+
+> **Tại sao MSB?** Sepay có API trực tiếp với MSB. Đang có **promo dùng Sepay 0đ trong 3 tháng** khi mở TK MSB. eKYC online dễ hơn MB Bank, ít vướng OTP.
+> **Khi nào nên làm?** Sau khi bot manual đã chạy ổn 1–2 tuần và đã có vài khách đặt mua thật. Đừng làm trước khi mở bán.
+
+---
+
+## SO SÁNH NHANH MSB vs MB BANK (cho Sepay)
+
+| Tiêu chí | MSB | MB Bank |
+|---|---|---|
+| API trực tiếp Sepay | ✓ | ✓ |
+| eKYC online | Dễ | Trung bình |
+| Cấp quyền API bên thứ 3 | Không cần OTP riêng (qua web banking) | Cần OTP qua app (hay lỗi) |
+| Promo Sepay | **Free 3 tháng** | Không có |
+| Hạn mức TK cá nhân | 100tr/ngày | 200tr/ngày |
+| Phù hợp bán combo 99-199k | Đủ cho 500+ đơn/ngày | Đủ cho 1000+ đơn/ngày |
+
+→ **MSB thắng** ở khâu setup. Anh không cần đổi TK chính (vẫn dùng VCB/MB cho cá nhân), MSB chỉ là TK "thu tiền bán hàng".
+
+---
+
+## BƯỚC 1 · MỞ TK MSB ONLINE (15-20 phút)
+
+### 1.1 Tải app MSB mBank
+
+- iOS: App Store → tìm **"MSB mBank"** (KHÔNG phải MSB cũ — chú ý chọn app mới)
+- Android: Google Play → **"MSB mBank"** (chữ M màu đỏ)
+
+### 1.2 Đăng ký mới
+
+1. Mở app → **Đăng ký** → **Khách hàng mới**
+2. Chụp 2 mặt CCCD gắn chip
+3. Quay video selfie xác thực (4–5 giây nhìn thẳng + quay đầu)
+4. Đặt 6 số PIN + mật khẩu đăng nhập
+5. Đợi 5–10 phút duyệt tự động → nhận STK MSB (dạng `031xxxxxxxxxxxx`)
+
+> **Tip**: Nếu eKYC fail do ánh sáng hoặc CCCD cũ → ra phòng giao dịch MSB gần nhất, mở 15 phút là xong. Hà Nội/HCM có rất nhiều chi nhánh.
+
+### 1.3 Kích hoạt Internet Banking
+
+1. App MSB → **Cài đặt** → **Internet Banking**
+2. Bật **Đăng nhập web** + **Cho phép kết nối bên thứ 3**
+3. Tạo mật khẩu Internet Banking (khác mật khẩu app)
+
+---
+
+## BƯỚC 2 · LINK MSB VỚI SEPAY (10 phút)
+
+### 2.1 Quay lại trang Sepay
+
+1. https://my.sepay.vn → đăng nhập
+2. Menu trái → **Ngân hàng** → **Kết nối mới**
+3. Chọn **MSB — Ngân hàng TMCP Hàng hải Việt Nam** → **Cá nhân** → **Tiếp theo**
+
+### 2.2 Điền thông tin TK MSB
+
+1. **Số TK MSB**: paste STK vừa mở
+2. **Tên chủ TK**: tự fill = TA QUANG THUAN
+3. **Số CCCD**: số CCCD đăng ký với MSB
+4. **SĐT**: SĐT đăng ký với MSB
+5. **Tên gợi nhớ**: `Bán combo AI`
+6. Click **Tiếp tục**
+
+### 2.3 Cấp quyền API qua MSB Internet Banking
+
+Sepay sẽ redirect sang trang MSB Internet Banking. Tại đó:
+
+1. Đăng nhập MSB IB (username + password tạo ở bước 1.3)
+2. Trang **"Cấp quyền cho ứng dụng SePay"** hiện ra
+3. Tick **Đồng bộ giao dịch tiền vào**
+4. Click **Đồng ý** → MSB redirect về Sepay
+5. Sepay báo "Kết nối thành công"
+
+> Nếu MSB hỏi OTP, OTP đến SĐT đăng ký với MSB. Nhập là xong.
+
+### 2.4 Test giao dịch (Bước 4 trong Sepay)
+
+Sepay yêu cầu CK 2.000đ test vào TK MSB vừa link.
+
+1. Chuyển từ VCB/MB sang MSB `<STK MSB>` — nội dung tuỳ ý
+2. Đợi 5–10 giây
+3. Sepay UI tự refresh → báo "Đã nhận giao dịch test" → done
+
+---
+
+## BƯỚC 3 · TẠO API KEY (3 phút)
+
+1. Menu trái Sepay → **API Access**
+2. Click **+ Tạo API key mới**
+3. Đặt tên: `bot-aithucchien-prod`
+4. Phân quyền: tick **"Webhook tiền vào"** (mặc định đủ)
+5. Click **Tạo** → Sepay hiển thị API key **MỘT LẦN DUY NHẤT**
+6. Copy ngay → paste vào notepad an toàn
+
+> **NGUY HIỂM**: API key chỉ hiện 1 lần. Nếu mất → phải tạo cái mới.
+
+---
+
+## BƯỚC 4 · SET WEBHOOK URL (2 phút)
+
+1. Menu trái Sepay → **Tích hợp WebHooks**
+2. Click **+ Thêm webhook**
+3. Điền:
+   - **URL**: `https://YOUR-RAILWAY-APP.up.railway.app/sepay-webhook` (URL Railway của anh, copy từ Railway Settings → Domains)
+   - **Sự kiện**: tick **"Tiền vào"** (transferType=in)
+   - **Định dạng**: JSON
+4. Save → Sepay test connection → phải thấy 200 OK
+5. Nếu lỗi → check URL Railway đúng chưa (có `/sepay-webhook` ở cuối)
+
+---
+
+## BƯỚC 5 · KÍCH HOẠT MODE AUTOMATIC TRONG BOT (1 phút)
+
+1. Mở Railway project → tab **Variables**
+2. Click **+ New Variable** → thêm:
+
+| Tên biến | Giá trị |
+|---|---|
+| `SEPAY_API_KEY` | (API key vừa copy ở Bước 3) |
+| `BANK_ACCOUNT` | (STK MSB vừa mở) |
+| `BANK_NAME` | `MSB` |
+
+3. Save → Railway tự redeploy (30 giây)
+4. Vào **Deployments → Logs** → phải thấy:
+
+```
+MODE: AUTOMATIC — Sepay webhook: https://...up.railway.app/sepay-webhook
+```
+
+→ Bot đã chuyển sang automatic. Từ giờ KHÔNG cần `/confirm` thủ công nữa.
+
+---
+
+## BƯỚC 6 · TEST AUTOMATIC END-TO-END (5 phút)
+
+### Test với GD thật
+
+1. Bằng máy khác, chat bot `/mua_combo` → bot trả mã `TXN ABC123`
+2. Anh CK 1.000đ từ VCB/MB cũ sang MSB STK mới, nội dung `MUA TXN ABC123`
+3. Đợi 1–3 giây — Sepay nhận → webhook tới bot → bot thấy thiếu tiền (1k < 199k)
+4. Bot gửi cho khách: "Đã nhận 1.000đ nhưng thiếu 198.000đ"
+5. CK bù 198.000đ với cùng nội dung
+6. Bot tự gửi link Drive trong 1–3 giây
+
+→ **Nếu cả 2 bước đúng → bot automatic đã hoạt động hoàn hảo.**
+
+### Verify trên Sepay dashboard
+
+- **Tiền vào tháng này**: phải thấy 199.000đ
+- **WebHooks đã bắn**: 1
+- **WebHooks thành công**: 1
+
+---
+
+## CẬP NHẬT FILE BÁN HÀNG (2 phút)
+
+File `GioiThieu_TacGia.html` đang ghi cả VCB + MB. Cần đổi MB → MSB và đẩy MSB lên đầu.
+
+Tôi sẽ tự update khi anh báo "MSB xong rồi". Không cần làm thủ công.
+
+---
+
+## NHỮNG GÌ THAY ĐỔI SAU KHI LÊN AUTOMATIC
+
+| Tình huống | Trước (Manual) | Sau (Automatic) |
+|---|---|---|
+| Khách CK đúng | Anh `/confirm` tay | Bot tự gửi link trong 1-3 giây |
+| Khách CK thiếu tiền | Anh phải tự nhắn khách | Bot tự cảnh báo khách |
+| Khách CK sai nội dung | Anh phải tìm tay | Bot log vào `/unmatched` để anh review |
+| Đêm khuya khách CK | Sáng anh `/confirm` | Bot làm 24/7 |
+| Anh đi du lịch | Phải dậy check ĐT | Bot chạy không cần anh |
+
+---
+
+## CHI PHÍ SAU KHI LÊN AUTOMATIC
+
+| Khoản | Phí/tháng |
+|---|---|
+| MSB — duy trì TK cá nhân | 0đ |
+| Sepay — gói FREE (3 tháng đầu) | 0đ |
+| Sepay — gói FREE (sau 3 tháng) | 0đ nếu &lt;50 GD/tháng |
+| Sepay — gói Startup (vượt 50 GD) | 84.000đ/tháng cho 180 GD |
+| Railway | ~120.000đ/tháng |
+| **Tổng 3 tháng đầu** | **~120k/tháng** |
+| **Tổng sau 3 tháng (nếu &lt;50 GD)** | **~120k/tháng** |
+| **Tổng sau 3 tháng (50-180 GD)** | **~204k/tháng** |
+
+---
+
+## CHECKLIST TRƯỚC KHI CHUYỂN TỪ MANUAL SANG AUTO
+
+- ☐ TK MSB đã mở thành công, có số TK
+- ☐ Internet Banking MSB đã active
+- ☐ Sepay đã link MSB (xanh trên dashboard)
+- ☐ Sepay đã có giao dịch test thành công (Bước 4)
+- ☐ API key đã tạo + lưu an toàn
+- ☐ Webhook URL đã set + Sepay báo 200 OK
+- ☐ Railway đã thêm `SEPAY_API_KEY` + đổi `BANK_ACCOUNT` → STK MSB
+- ☐ Log Railway thấy "MODE: AUTOMATIC"
+- ☐ Test GD thật 199k → bot tự gửi link OK
+- ☐ Đã thông báo khách hàng cũ: "STK mới là MSB ... — STK cũ vẫn nhận nhưng chậm 30 phút"
+
+**Khi 10/10 checked → manual mode đã chính thức nghỉ hưu. Tự động 100%.**
+
+---
+
+*AI Thực Chiến · MSB + Sepay Auto Setup · 18/05/2026 · Tạ Quang Thuận*

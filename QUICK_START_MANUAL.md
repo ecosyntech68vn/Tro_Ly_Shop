@@ -1,0 +1,257 @@
+# MỞ BÁN TRONG 30 PHÚT · CHẾ ĐỘ MANUAL
+
+> **Mục tiêu:** Bot online, khách đặt được đơn, anh confirm thủ công, link tự gửi.
+> **Yêu cầu:** KHÔNG cần Sepay. KHÔNG cần OTP. KHÔNG cần SMS forward.
+> **Tiêu chí thành công:** Trong 30 phút có URL bot online, khách bên ngoài đặt được đơn test.
+
+---
+
+## CHECKLIST CHUẨN BỊ (5 PHÚT)
+
+Trước khi bắt đầu, chuẩn bị sẵn 4 thứ — paste vào notepad:
+
+```
+[1] BOT_TOKEN mới        = (lấy từ BotFather sau khi /revoke)
+[2] ADMIN_CHAT_ID        = 558789316
+[3] BANK_ACCOUNT (MB)    = 3100181888868
+[4] 3 link Google Drive  = 
+    - mua_combo:    https://drive.google.com/...
+    - mua_claude:   https://drive.google.com/...
+    - mua_opencode: https://drive.google.com/...
+```
+
+### Lấy BOT_TOKEN mới
+
+1. Telegram → chat với `@BotFather`
+2. `/mybots` → chọn `@Tro_Ly_Thuan_AI_bot` → **API Token** → **Revoke current token**
+3. BotFather đưa token mới — copy paste vào `[1]` ở trên
+
+### Tạo 3 folder Drive
+
+1. Google Drive → tạo 3 folder: `Combo Full Pack`, `Claude AI Thực Chiến`, `OpenCode Thực Chiến`
+2. Upload 12 file PDF (sau khi xuất từ HTML) vào folder phù hợp
+3. Với mỗi folder → click chuột phải → **Share** → **Anyone with the link → Viewer** → Copy link
+4. Paste 3 link vào `[4]` ở trên
+
+---
+
+## BƯỚC 1 · PUSH CODE LÊN GITHUB (5 phút)
+
+```bash
+# Mở terminal, cd vào folder bot_sepay
+cd "C:\Users\thuan\Desktop\ECOSYNTECHGLOBAL2026\Combo_FullPack_v3.0_PDF\v3.1_REBUILT\bot_sepay"
+
+# Khởi tạo git
+git init
+git add .
+git commit -m "Bot v1 manual mode"
+
+# Tạo repo PRIVATE trên github.com → đặt tên "bot-aithucchien"
+# KHÔNG tick "Add README" — đã có sẵn
+
+# Push (thay USERNAME bằng GitHub username của anh)
+git remote add origin https://github.com/USERNAME/bot-aithucchien.git
+git branch -M main
+git push -u origin main
+```
+
+> **Lưu ý:** Repo PHẢI là Private. Kiểm tra `.gitignore` đã chặn `.env` và `*.db`.
+
+---
+
+## BƯỚC 2 · DEPLOY RAILWAY (10 phút)
+
+### 2.1 Tạo project
+
+1. Vào https://railway.app → **Login with GitHub** (cho phép Railway truy cập repo)
+2. **New Project → Deploy from GitHub repo** → chọn `bot-aithucchien`
+3. Railway tự nhận `requirements.txt` + `Procfile`, bắt đầu build
+
+### 2.2 Set Environment Variables
+
+Trong project → tab **Variables** → **+ New Variable** → thêm từng cái:
+
+| Tên biến | Giá trị |
+|---|---|
+| `BOT_TOKEN` | (token mới từ BotFather) |
+| `ADMIN_CHAT_ID` | `558789316` |
+| `BANK_ACCOUNT` | `3100181888868` |
+| `BANK_NAME` | `MB Bank` |
+| `BANK_OWNER` | `TA QUANG THUAN` |
+
+**KHÔNG thêm `SEPAY_API_KEY`** — để trống là bot chạy ở mode Manual.
+
+### 2.3 Generate public URL
+
+1. Tab **Settings** → mục **Networking** → **Generate Domain**
+2. Railway cấp URL dạng `https://bot-aithucchien-production.up.railway.app`
+3. Copy URL này → quay lại tab **Variables** → thêm:
+
+| Tên biến | Giá trị |
+|---|---|
+| `BASE_URL` | `https://bot-aithucchien-production.up.railway.app` |
+
+Railway tự redeploy. Đợi 30 giây.
+
+### 2.4 Verify
+
+Mở URL trong browser:
+```
+https://bot-aithucchien-production.up.railway.app/
+```
+
+Phải thấy:
+```json
+{"status": "ok", "service": "AI Thực Chiến Bot"}
+```
+
+Xem **Deployments** tab → click deployment → **Logs** → phải thấy dòng:
+```
+MODE: MANUAL — Sepay disabled. Admin xác nhận đơn bằng /confirm TXNxxx
+```
+
+---
+
+## BƯỚC 3 · SET TELEGRAM WEBHOOK (2 phút)
+
+Mở browser, gõ URL (thay `{TOKEN}` và `{BASE_URL}` của anh):
+
+```
+https://api.telegram.org/bot{TOKEN}/setWebhook?url={BASE_URL}/telegram-webhook
+```
+
+Ví dụ:
+```
+https://api.telegram.org/bot1234567890:AAH.../setWebhook?url=https://bot-aithucchien-production.up.railway.app/telegram-webhook
+```
+
+Phải thấy:
+```json
+{"ok":true,"result":true,"description":"Webhook was set"}
+```
+
+---
+
+## BƯỚC 4 · CÀI LINK DRIVE (3 phút)
+
+Telegram → chat với `@Tro_Ly_Thuan_AI_bot` → gõ từng dòng:
+
+```
+/set_link mua_combo https://drive.google.com/drive/folders/COMBO_FOLDER_ID
+/set_link mua_claude https://drive.google.com/drive/folders/CLAUDE_FOLDER_ID
+/set_link mua_opencode https://drive.google.com/drive/folders/OPENCODE_FOLDER_ID
+```
+
+Mỗi lệnh bot xác nhận "Đã cập nhật link cho ..." là OK.
+
+---
+
+## BƯỚC 5 · TEST END-TO-END (5 phút)
+
+### Test bằng tài khoản Telegram khác (vợ/bạn/máy phụ)
+
+1. Người test mở Telegram → tìm `@Tro_Ly_Thuan_AI_bot` → `/start`
+2. Bot phải trả menu inline button
+3. Người test gõ `/mua_combo` → bot trả mã `TXN ABC123` + STK MB
+4. **Người test KHÔNG cần CK thật** — chỉ giả lập
+
+### Anh xác nhận đơn thủ công
+
+Trong chat của ANH (admin) với bot, gõ:
+
+```
+/confirm TXN ABC123
+```
+
+(Thay `TXN ABC123` bằng mã bot vừa trả ở bước 3)
+
+Bot phải:
+- Gửi link Drive cho người test
+- Reply anh: "Đã confirm đơn..."
+
+→ Nếu cả 2 đều OK → **bot đã sẵn sàng bán**.
+
+---
+
+## QUY TRÌNH VẬN HÀNH HÀNG NGÀY
+
+### Khi có khách đặt mua
+
+```
+1. Khách /mua_combo trong bot
+2. Bot tạo mã TXN ABC123, gửi STK MB + nội dung CK
+3. Khách CK qua app ngân hàng với nội dung MUA TXN ABC123
+4. Anh nhận thông báo biến động trên app MB Bank
+5. Anh chat bot: /confirm TXN ABC123
+6. Bot tự gửi link Drive cho khách + báo anh "đã xử lý"
+7. Khách nhận link, tải combo về
+```
+
+### Buổi sáng
+
+- Chat bot: `/sale_stats` → xem doanh số tổng kết hôm qua
+- Check `/unmatched` (mode manual sẽ luôn trống — không có Sepay)
+
+### Buổi tối
+
+- Backup file `bot.db` từ Railway shell (nếu chưa setup Railway Volume)
+
+---
+
+## XỬ LÝ TÌNH HUỐNG
+
+### Khách đã CK nhưng anh chưa thấy thông báo MB
+
+1. Mở app MB Bank → tab **Giao dịch** → tìm theo nội dung `MUA TXN ABC123`
+2. Nếu thấy → `/confirm TXN ABC123` ngay
+3. Nếu KHÔNG thấy → hỏi khách chụp ảnh CK + check nội dung sai không
+
+### Khách CK sai nội dung (vd quên mã đơn)
+
+1. Hỏi khách số tiền + thời gian CK chính xác
+2. Đối chiếu với app MB → xác nhận khách là người CK
+3. Tìm mã đơn của khách qua bot: chat với bot, scroll lên xem họ đặt mã nào
+4. `/confirm TXN xxx` cho đơn đó
+
+### Khách CK thiếu tiền
+
+Bot không tự phát hiện được ở mode manual. Anh tự check + nhắn khách CK bù qua chat trực tiếp.
+
+### Bot không phản hồi
+
+1. Vào Railway → Deployments → Logs → tìm error
+2. Test webhook: `https://api.telegram.org/bot{TOKEN}/getWebhookInfo` → check `last_error_message`
+3. Nếu lỗi → restart service trong Railway
+
+---
+
+## NÂNG CẤP LÊN TỰ ĐỘNG (HƯỚNG B)
+
+Khi đã ổn định 50–100 đơn:
+1. Mở **MSB** theo file [MSB_SETUP.md](./MSB_SETUP.md)
+2. Đăng ký Sepay với MSB → lấy API key
+3. Vào Railway → thêm `SEPAY_API_KEY=xxx` → redeploy
+4. Bot tự chuyển sang mode AUTOMATIC, không cần `/confirm` thủ công nữa
+
+Anh không phải sửa code, không phải deploy lại. Chỉ thêm 1 env var.
+
+---
+
+## CHECKLIST TRƯỚC GO-LIVE
+
+- ☐ Token bot cũ đã revoke, dùng token mới
+- ☐ Code đã push lên GitHub PRIVATE
+- ☐ Railway deploy thành công, URL trả OK
+- ☐ Log Railway thấy "MODE: MANUAL"
+- ☐ Telegram webhook đã set, `last_error_message` null
+- ☐ 3 link Drive đã `/set_link` xong
+- ☐ Test bằng tài khoản khác — bot trả mã đơn OK
+- ☐ `/confirm` test — bot gửi link OK
+- ☐ App MB Bank trên điện thoại đã bật thông báo biến động số dư
+- ☐ Đã chuẩn bị reply mẫu khi khách hỏi: "Chuyển khoản theo nội dung bot gửi, anh sẽ confirm trong 30 phút."
+
+**Khi 10/10 checked → mở bán.**
+
+---
+
+*AI Thực Chiến · Quick Start Manual Mode · 18/05/2026 · Tạ Quang Thuận*
