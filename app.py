@@ -129,7 +129,7 @@ def tg_keyboard():
 def handle_start(chat_id, first_name):
     text = (
         f"Xin chào *{first_name}*,\n\n"
-        "Tôi là trợ lý bán hàng tự động của CEO *Tạ Quang Thuận — AI Thực Chiến*.\n\n"
+        "Tôi là trợ lý bán hàng tự động của anh *Tạ Quang Thuận — AI Thực Chiến*.\n\n"
         "Bộ sản phẩm hiện có:\n\n"
         "*Combo Full Pack* — 199.000đ (tiết kiệm 49k)\n"
         "  └ Trọn bộ Claude + OpenCode, 8 cấp độ\n\n"
@@ -400,7 +400,7 @@ def telegram_webhook():
         handle_lien_he(chat_id)
     else:
         tg_send(chat_id,
-                "Tôi chưa hiểu lệnh đó. Gõ /start để xem menu chính.")
+                "Tôi chưa hiểu lệnh đó. Bạn vui lòng Gõ /start để xem menu chính.")
 
     return jsonify({"ok": True})
 
@@ -476,7 +476,7 @@ def sepay_webhook():
         return jsonify({"ok": True, "msg": "Underpaid"})
 
     # 6. Match successful — mark paid + deliver
-    drive_link = get_product_link(sku) or "[Link chưa cập nhật — liên hệ tác giả]"
+    drive_link = get_product_link(sku) or "[Link chưa cập nhật — Liên hệ tác giả]"
     mark_order_paid(code, ref, drive_link)
 
     prod = PRODUCTS.get(sku, {"name": sku})
