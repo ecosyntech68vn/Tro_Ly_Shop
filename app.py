@@ -136,7 +136,7 @@ def handle_start(chat_id, first_name):
         "*Claude AI Thực Chiến* — 99.000đ\n"
         "  └ Cho dân văn phòng, sinh viên, không cần biết code\n\n"
         "*OpenCode Thực Chiến* — 149.000đ\n"
-        "  └ Cho developer, tech lead, Cho dân văn phòng, sinh viên, không cần biết code\n\n"
+        "  └ Cho dân văn phòng, sinh viên, không cần biết code\n\n"
         "Chọn sản phẩm bên dưới hoặc gõ:\n"
         "/mua\\_combo — mua combo\n"
         "/mua\\_claude — mua Claude\n"
