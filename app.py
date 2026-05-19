@@ -162,7 +162,7 @@ def handle_mua(chat_id, sku):
     if SEPAY_API_KEY:
         eta = "⏱ Bot tự động gửi link tải trong 30 giây sau khi nhận tiền."
     else:
-        eta = ("⏱ Tác giả xác nhận thủ công trong 30 phút "
+        eta = ("⏱ Nếu Sepay lỗi, Tác giả xác nhận thủ công trong 10 - 30 phút "
                "(giờ làm việc 9:00–22:00 hàng ngày).")
 
     # Caption HTML (an toàn hơn Markdown vì underscore trong /lien_he không phá parser)
