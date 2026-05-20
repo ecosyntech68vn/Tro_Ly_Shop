@@ -136,26 +136,37 @@ def tg_keyboard():
 
 
 # ============================================================
+# LINK RESOLVER
+# ============================================================
+
+def resolve_drive_link(sku):
+    """Lấy link Drive cho 1 SKU.
+    Ưu tiên DB (admin /set_link) → fallback link mặc định trong config.PRODUCTS.
+    Default đảm bảo link KHÔNG mất khi Render free reset DB ephemeral (redeploy/sleep)."""
+    return get_product_link(sku) or PRODUCTS.get(sku, {}).get("drive_link")
+
+
+# ============================================================
 # BOT MESSAGE HANDLERS
 # ============================================================
 
 def handle_start(chat_id, first_name):
     text = (
         f"Xin chào *{first_name}*,\n\n"
-        "Tôi là trợ lý mua hàng tự động của *Tạ Quang Thuận — AI Thực Chiến*.\n\n"
+        "Tôi là trợ lý bán hàng tự động của anh *Tạ Quang Thuận — AI Thực Chiến*.\n\n"
         "Bộ sản phẩm hiện có:\n\n"
         "*Combo Full Pack* — 199.000đ (tiết kiệm 49k)\n"
-        "  └ Trọn bộ Claude + OpenCode, 8 cấp độ\n\n"
+        "  └ Trọn bộ Claude + OpenCode, 4 cấp độ cho mỗi bản\n\n"
         "*Claude AI Thực Chiến* — 99.000đ\n"
-        "  └ Cho dân văn phòng, sinh viên, không cần biết code\n\n"
+        "  └ Cho dân văn phòng, sinh viên, không cần biết code, dveloper\n\n"
         "*OpenCode Thực Chiến* — 149.000đ\n"
-        "  └ Cho developer, tech lead\n\n"
+        "  └ Cho dân văn phòng, không cần biết code, developer, tech lead\n\n"
         "Chọn sản phẩm bên dưới hoặc gõ:\n"
         "/mua\\_combo — mua combo\n"
         "/mua\\_claude — mua Claude\n"
         "/mua\\_opencode — mua OpenCode\n"
         "/trang\\_thai — kiểm tra đơn\n"
-        "/lien\\_he — gặp tác giả"
+        "/lien\\_he — gặp anh Thuận"
     )
     tg_send(chat_id, text, reply_markup=tg_keyboard())
 
@@ -163,7 +174,7 @@ def handle_start(chat_id, first_name):
 def handle_mua(chat_id, sku):
     """Tạo đơn hàng mới + gửi QR thanh toán + hướng dẫn."""
     if sku not in PRODUCTS:
-        tg_send(chat_id, "Sản phẩm không tồn tại. Gõ /start để xem menu.")
+        tg_send(chat_id, "Sản phẩm không tồn tại. Vui lòng Gõ /start để xem menu.")
         return
 
     prod = PRODUCTS[sku]
@@ -175,7 +186,7 @@ def handle_mua(chat_id, sku):
     if SEPAY_API_KEY:
         eta = "⏱ Bot tự động gửi link tải trong 30 giây sau khi nhận tiền."
     else:
-        eta = ("⏱ Tác giả xác nhận thủ công trong 30 phút "
+        eta = ("⏱ Nếu Sepay lỗi, anh Thuận xác nhận thủ công trong 3-10 phút "
                "(giờ làm việc 9:00–22:00 hàng ngày).")
 
     # Caption HTML (an toàn hơn Markdown vì underscore trong /lien_he không phá parser)
@@ -183,15 +194,15 @@ def handle_mua(chat_id, sku):
         f"<b>Đơn hàng #{code}</b> — {prod['price']:,}đ\n"
         f"Sản phẩm: <b>{prod['name']}</b>\n\n"
         f"<b>📱 Cách 1 — Quét QR (nhanh nhất):</b>\n"
-        f"Mở app ngân hàng (VCB / MB / MoMo / ZaloPay…) → bấm Quét QR → quét ảnh trên.\n"
-        f"App tự điền STK, số tiền và nội dung. Bạn chỉ xác nhận chuyển.\n\n"
+        f"Mở app ngân hàng (VCB / MB / MoMo / ZaloPay…) → Anh/chị bấm Quét QR → quét ảnh trên.\n"
+        f"App tự điền STK, số tiền và nội dung. Anh/chị chỉ xác nhận chuyển.\n\n"
         f"<b>✍️ Cách 2 — Chuyển thủ công:</b>\n"
         f"Ngân hàng: <b>{BANK_NAME}</b>\n"
         f"STK: <code>{BANK_ACCOUNT}</code>\n"
         f"Chủ TK: <b>{BANK_OWNER}</b>\n"
         f"Nội dung: <code>{ck_content}</code>\n\n"
         f"{eta}\n"
-        f"<i>Cần hỗ trợ? Gõ /lien_he</i>"
+        f"<i>Anh /chị Cần hỗ trợ? Vui lòng Gõ /lien_he</i>"
     )
 
     ok = tg_send_photo(chat_id, qr_url, caption)
@@ -213,7 +224,7 @@ def handle_mua(chat_id, sku):
 def handle_trang_thai(chat_id):
     order = get_order_by_chat(chat_id)
     if not order:
-        tg_send(chat_id, "Bạn chưa có đơn hàng. Gõ /start để xem sản phẩm.")
+        tg_send(chat_id, "Anh/chị chưa có đơn hàng. Vui lòng Gõ /start để xem sản phẩm.")
         return
 
     code, sku, amount, status, drive_link = order
@@ -225,22 +236,22 @@ def handle_trang_thai(chat_id):
     st = info.get("status", status)
 
     if st == "paid":
-        link = drive_link or get_product_link(sku) or "[Đang cập nhật — vui lòng liên hệ tác giả]"
+        link = drive_link or resolve_drive_link(sku) or "[Đang cập nhật — vui lòng liên hệ anh Thuận]"
         text = (
             f"*Đơn #{code}* — Đã thanh toán\n"
             f"Sản phẩm: {prod['name']}\n"
             f"Số tiền: {amount:,}đ\n\n"
             f"Link tải: {link}\n\n"
-            f"Cảm ơn bạn đã mua hàng."
+            f"Cảm ơn anh/chị đã mua hàng, Chúc anh chị thực hành tốt và đạt nhiều thành tựu."
         )
     elif st == "expired":
         text = (
             f"*Đơn #{code}* — *Đã hết hạn*\n"
             f"Sản phẩm: {prod['name']}\n\n"
             f"Đơn này quá *{PENDING_TIMEOUT_MINUTES} phút* chưa nhận được thanh toán nên đã hết hạn.\n\n"
-            f"Vui lòng tạo đơn mới: /mua\\_combo, /mua\\_claude hoặc /mua\\_opencode "
+            f"Anh/chị Vui lòng tạo đơn mới: /mua\\_combo, /mua\\_claude hoặc /mua\\_opencode "
             f"rồi chuyển khoản trong vòng {PENDING_TIMEOUT_MINUTES} phút.\n\n"
-            f"Đã chuyển tiền cho đơn cũ? Gõ /lien\\_he để tác giả xử lý thủ công."
+            f"Anh/chị Đã chuyển tiền cho đơn cũ? Gõ /lien\\_he để anh Thuận xử lý thủ công ạ."
         )
     else:  # pending
         text = (
@@ -252,17 +263,17 @@ def handle_trang_thai(chat_id):
             f"1. Số tiền chuyển đúng *{amount:,}đ*\n"
             f"2. Nội dung CK đúng *MUA {code}*\n"
             f"3. Đợi thêm 1–2 phút (ngân hàng có thể delay)\n\n"
-            f"Nếu đã chuyển đúng, gõ /lien\\_he."
+            f"Nếu anh/chị đã chuyển đúng, Vui lòng gõ /lien\\_he."
         )
     tg_send(chat_id, text)
 
 
 def handle_lien_he(chat_id):
     text = (
-        "*Kênh liên hệ trực tiếp tác giả:*\n\n"
+        "*Kênh liên hệ trực tiếp anh Thuận:*\n\n"
         "Email: thuanktqd.mba@gmail.com\n"
         "Giờ hỗ trợ: Chủ Nhật 9:00–12:00 (giờ Việt Nam)\n\n"
-        "Khi nhắn, gửi kèm:\n"
+        "Khi nhắn, anh/chị gửi kèm:\n"
         "1. Mã đơn (nếu có)\n"
         "2. Ảnh chụp giao dịch ngân hàng\n"
         "3. Vấn đề gặp phải"
@@ -332,7 +343,7 @@ def handle_admin(chat_id, text):
         customer_chat_id = info["chat_id"]
         sku = info["sku"]
         expected_amount = info["amount"]
-        drive_link = get_product_link(sku)
+        drive_link = resolve_drive_link(sku)
         # Chặn confirm nếu chưa set link: tránh mark paid + gửi placeholder rác cho khách.
         if not drive_link:
             tg_send(chat_id,
@@ -348,8 +359,8 @@ def handle_admin(chat_id, text):
                 f"Đã nhận thanh toán *{expected_amount:,}đ* cho đơn *#{code}*.\n"
                 f"Sản phẩm: *{prod['name']}*\n\n"
                 f"*Link tải:*\n{drive_link}\n\n"
-                f"Cảm ơn bạn đã mua hàng.\n"
-                f"Mọi vấn đề về sản phẩm, gõ /lien\\_he.")
+                f"Cảm ơn anh/chị đã mua hàng. Chúc anh chị thực hành tốt và đạt được nhiều thành công.\n"
+                f"Mọi vấn đề về sản phẩm, anh/chị gõ /lien\\_he.")
         # Báo admin
         tg_send(chat_id,
                 f"✅ Đã confirm đơn *#{code}* (manual) — {prod['name']} — {expected_amount:,}đ.\n"
@@ -474,7 +485,7 @@ def telegram_webhook():
         handle_lien_he(chat_id)
     else:
         tg_send(chat_id,
-                "Tôi chưa hiểu lệnh đó. Gõ /start để xem menu chính.")
+                "Tôi chưa hiểu lệnh đó. Anh/chị hãy Gõ /start để xem menu chính.")
 
     return jsonify({"ok": True})
 
@@ -546,19 +557,19 @@ def sepay_webhook():
                                reason=f"Thiếu tiền: nhận {amount}, cần {expected_amount} (đơn #{code})")
         tg_send(chat_id,
                 f"Đã nhận {amount:,}đ cho đơn #{code} nhưng *thiếu {expected_amount-amount:,}đ*.\n"
-                f"Vui lòng chuyển bù hoặc liên hệ tác giả.")
+                f"Vui lòng chuyển bù hoặc liên hệ anh Thuận.")
         return jsonify({"ok": True, "msg": "Underpaid"})
 
     # 6. Match successful
     prod = PRODUCTS.get(sku, {"name": sku})
-    drive_link = get_product_link(sku)
+    drive_link = resolve_drive_link(sku)
     # Nếu admin CHƯA set link: KHÔNG mark paid (giữ pending để /confirm khôi phục được),
     # báo khách chờ + cảnh báo admin gấp. Tránh giao link rác coi như đã xong.
     if not drive_link:
         tg_send(chat_id,
                 f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}* ✅\n"
-                f"Link tải đang được chuẩn bị, tác giả gửi cho bạn trong ít phút.\n"
-                f"Cần gấp? Gõ /lien\\_he.")
+                f"Link tải đang được chuẩn bị, Anh Thuận sẽ gửi cho anh/chị trong ít phút.\n"
+                f"Anh/chị Cần gấp? Hãy nhắn Zalo/ gọi 0985438373 hoặc Gõ /lien\\_he.")
         if ADMIN_CHAT_ID:
             tg_send(ADMIN_CHAT_ID,
                     f"🚨 ĐÃ THU TIỀN nhưng CHƯA set link Drive!\n"
@@ -572,8 +583,8 @@ def sepay_webhook():
         f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}*.\n"
         f"Sản phẩm: *{prod['name']}*\n\n"
         f"*Link tải:*\n{drive_link}\n\n"
-        f"Cảm ơn bạn đã mua hàng.\n"
-        f"Mọi vấn đề về sản phẩm, gõ /lien\\_he.\n\n"
+        f"Cảm ơn Anh/chị đã mua hàng.\n"
+        f"Mọi vấn đề về sản phẩm, hãy gõ /lien\\_he.\n\n"
         f"_Mã giao dịch ngân hàng: {ref}_"
     )
     tg_send(chat_id, deliver_text)
@@ -682,13 +693,13 @@ def vcb_email_webhook():
 
     # Match thành công
     prod = PRODUCTS.get(sku, {"name": sku})
-    drive_link = get_product_link(sku)
+    drive_link = resolve_drive_link(sku)
     if not drive_link:
         # Đã thu tiền nhưng admin chưa set link → giữ pending, báo khách chờ + alert admin gấp.
         tg_send(chat_id,
                 f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}* ✅\n"
-                f"Link tải đang được chuẩn bị, tác giả gửi cho bạn trong ít phút.\n"
-                f"Cần gấp? Gõ /lien\\_he.")
+                f"Link tải đang được chuẩn bị, Anh Thuận sẽ gửi cho anh/chị trong ít phút.\n"
+                f"Anh/chị Cần gấp? Hãy Gõ /lien\\_he.")
         if ADMIN_CHAT_ID:
             tg_send(ADMIN_CHAT_ID,
                     f"🚨 ĐÃ THU TIỀN (VCB email) nhưng CHƯA set link!\n"
@@ -702,7 +713,7 @@ def vcb_email_webhook():
         f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}*.\n"
         f"Sản phẩm: *{prod['name']}*\n\n"
         f"*Link tải:*\n{drive_link}\n\n"
-        f"Cảm ơn bạn đã mua hàng.\n"
+        f"Cảm ơn anh/chị đã mua hàng. Chúc anh /chị sẽ thực hành tốt và đạt được nhiều thành công.\n"
         f"_Mã giao dịch: {ref}_"
     )
     tg_send(chat_id, deliver_text)
