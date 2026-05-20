@@ -183,7 +183,9 @@ def get_unmatched_payments(limit=10):
         rows = c.execute(
             "SELECT tx_id, amount, content, bank_ref, ts FROM unmatched "
             "ORDER BY id DESC LIMIT ?",
-            (rows): [tuple(r) for r in rows]
+            (limit,)
+        ).fetchall()
+        return [tuple(r) for r in rows]
 
 
 def update_product_link(sku, url):
