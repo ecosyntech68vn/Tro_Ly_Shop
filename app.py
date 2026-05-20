@@ -22,7 +22,7 @@ from config import (
     ADMIN_CHAT_ID, PRODUCTS, BASE_URL
 )
 from db import (
-    init_db, create_order, mark_order_paid, get_pending_order_by_code,
+    init_db, create_order, mark_order_paid, get_pending_order_by_code, get_order_status, expire_stale_orders, PENDING_TIMEOUT_MINUTES,
     get_order_by_chat, log_unmatched_payment, get_unmatched_payments,
     update_product_link, get_product_link
 )
@@ -85,6 +85,19 @@ def tg_send(chat_id, text, reply_markup=None):
         r = requests.post(f"{TG_API}/sendMessage", json=payload, timeout=10)
         if not r.ok:
             log.error(f"Telegram send failed: {r.status_code} {r.text}")
+            # Fallback CỰC QUAN TRỌNG: lỗi parse Markdown (400) thường do link Drive
+            # chứa '_' / '*' / '['. Gửi lại dạng plain-text để KHÔNG bao giờ mất tin
+            # (đặc biệt tin giao link cho khách đã trả tiền).
+            if r.status_code == 400:
+                payload.pop("parse_mode", None)
+                try:
+                    r2 = requests.post(f"{TG_API}/sendMessage", json=payload, timeout=10)
+                    if r2.ok:
+                        log.info("Telegram: đã gửi lại thành công ở chế độ plain-text")
+                    else:
+                        log.error(f"Telegram plain-text retry vẫn lỗi: {r2.status_code} {r2.text}")
+                except Exception as e2:
+                    log.exception(f"Telegram plain-text retry exception: {e2}")
     except Exception as e:
         log.exception(f"Telegram send exception: {e}")
 
@@ -129,14 +142,14 @@ def tg_keyboard():
 def handle_start(chat_id, first_name):
     text = (
         f"Xin chào *{first_name}*,\n\n"
-        "Tôi là trợ lý bán hàng tự động của anh *Tạ Quang Thuận — AI Thực Chiến*.\n\n"
+        "Tôi là trợ lý mua hàng tự động của *Tạ Quang Thuận — AI Thực Chiến*.\n\n"
         "Bộ sản phẩm hiện có:\n\n"
         "*Combo Full Pack* — 199.000đ (tiết kiệm 49k)\n"
         "  └ Trọn bộ Claude + OpenCode, 8 cấp độ\n\n"
         "*Claude AI Thực Chiến* — 99.000đ\n"
         "  └ Cho dân văn phòng, sinh viên, không cần biết code\n\n"
         "*OpenCode Thực Chiến* — 149.000đ\n"
-        "  └ Cho dân văn phòng, sinh viên, không cần biết code\n\n"
+        "  └ Cho developer, tech lead\n\n"
         "Chọn sản phẩm bên dưới hoặc gõ:\n"
         "/mua\\_combo — mua combo\n"
         "/mua\\_claude — mua Claude\n"
@@ -162,7 +175,7 @@ def handle_mua(chat_id, sku):
     if SEPAY_API_KEY:
         eta = "⏱ Bot tự động gửi link tải trong 30 giây sau khi nhận tiền."
     else:
-        eta = ("⏱ Nếu Sepay lỗi, Tác giả xác nhận thủ công trong 10 - 30 phút "
+        eta = ("⏱ Tác giả xác nhận thủ công trong 30 phút "
                "(giờ làm việc 9:00–22:00 hàng ngày).")
 
     # Caption HTML (an toàn hơn Markdown vì underscore trong /lien_he không phá parser)
@@ -206,7 +219,12 @@ def handle_trang_thai(chat_id):
     code, sku, amount, status, drive_link = order
     prod = PRODUCTS.get(sku, {"name": sku})
 
-    if status == "paid":
+    # Dùng get_order_status để biết trạng thái thực (có check timeout, không phụ thuộc
+    # vào việc expire_stale_orders đã chạy hay chưa).
+    info = get_order_status(code)
+    st = info.get("status", status)
+
+    if st == "paid":
         link = drive_link or get_product_link(sku) or "[Đang cập nhật — vui lòng liên hệ tác giả]"
         text = (
             f"*Đơn #{code}* — Đã thanh toán\n"
@@ -215,7 +233,16 @@ def handle_trang_thai(chat_id):
             f"Link tải: {link}\n\n"
             f"Cảm ơn bạn đã mua hàng."
         )
-    else:
+    elif st == "expired":
+        text = (
+            f"*Đơn #{code}* — *Đã hết hạn*\n"
+            f"Sản phẩm: {prod['name']}\n\n"
+            f"Đơn này quá *{PENDING_TIMEOUT_MINUTES} phút* chưa nhận được thanh toán nên đã hết hạn.\n\n"
+            f"Vui lòng tạo đơn mới: /mua\\_combo, /mua\\_claude hoặc /mua\\_opencode "
+            f"rồi chuyển khoản trong vòng {PENDING_TIMEOUT_MINUTES} phút.\n\n"
+            f"Đã chuyển tiền cho đơn cũ? Gõ /lien\\_he để tác giả xử lý thủ công."
+        )
+    else:  # pending
         text = (
             f"*Đơn #{code}* — *Chưa thanh toán*\n"
             f"Sản phẩm: {prod['name']}\n"
@@ -272,14 +299,47 @@ def handle_admin(chat_id, text):
         tg_send(chat_id, f"Đã cập nhật link cho *{sku}*:\n{url}")
 
     elif cmd == "/confirm" and len(parts) >= 2:
-        # Manual fallback: admin confirm thủ công khi Sepay lỗi/delay
-        code = parts[1].upper()
-        order = get_pending_order_by_code(code)
-        if not order:
-            tg_send(chat_id, f"Không tìm thấy đơn pending #{code}.")
+        # Manual fallback: admin confirm thủ công khi Sepay/email VCB lỗi/delay
+        # Strip ký tự '#' nếu admin gõ kèm (vd /confirm #TXNxxx)
+        code = parts[1].upper().lstrip("#").strip()
+        info = get_order_status(code)
+
+        if info["status"] == "not_found":
+            tg_send(chat_id,
+                    f"⚠️ Không tìm thấy đơn *#{code}* trong hệ thống.\n\n"
+                    f"Kiểm tra lại:\n"
+                    f"· Mã đơn có đúng không (3 chữ TXN + 6 ký tự)?\n"
+                    f"· Khách đã gõ /mua\\_xxx để tạo đơn chưa?\n\n"
+                    f"Xem /unmatched để kiểm tra giao dịch lạ.")
             return
-        _, customer_chat_id, sku, expected_amount, _ = order
-        drive_link = get_product_link(sku) or "[Link chưa cập nhật]"
+
+        if info["status"] == "expired":
+            mins = info.get("minutes_ago", 0)
+            tg_send(chat_id,
+                    f"⌛ Đơn *#{code}* đã hết hạn ({mins} phút trước, quá {PENDING_TIMEOUT_MINUTES} phút).\n\n"
+                    f"Đơn này đã được mark `expired` — không thể confirm nữa.\n"
+                    f"Hỏi khách gõ lại /mua\\_combo (hoặc /mua\\_claude, /mua\\_opencode) để tạo đơn mới, sau đó CK + /confirm trong vòng {PENDING_TIMEOUT_MINUTES} phút.")
+            return
+
+        if info["status"] == "paid":
+            tg_send(chat_id,
+                    f"✅ Đơn *#{code}* ĐÃ được thanh toán từ trước.\n"
+                    f"Paid at: `{info.get('paid_at', '?')}`\n"
+                    f"Không cần confirm lại — link đã gửi cho khách rồi.")
+            return
+
+        # status = pending (chưa hết hạn) → tiến hành confirm
+        customer_chat_id = info["chat_id"]
+        sku = info["sku"]
+        expected_amount = info["amount"]
+        drive_link = get_product_link(sku)
+        # Chặn confirm nếu chưa set link: tránh mark paid + gửi placeholder rác cho khách.
+        if not drive_link:
+            tg_send(chat_id,
+                    f"⚠️ Chưa có link Drive cho *{sku}* — đơn *#{code}* CHƯA bị mark paid.\n\n"
+                    f"Set link trước rồi /confirm lại:\n"
+                    f"`/set_link {sku} <url_drive>`")
+            return
         mark_order_paid(code, f"MANUAL-{chat_id}", drive_link)
 
         prod = PRODUCTS.get(sku, {"name": sku})
@@ -292,8 +352,19 @@ def handle_admin(chat_id, text):
                 f"Mọi vấn đề về sản phẩm, gõ /lien\\_he.")
         # Báo admin
         tg_send(chat_id,
-                f"Đã confirm đơn *#{code}* (manual) — {prod['name']} — {expected_amount:,}đ.\n"
+                f"✅ Đã confirm đơn *#{code}* (manual) — {prod['name']} — {expected_amount:,}đ.\n"
                 f"Đã gửi link cho khách (chat\\_id: `{customer_chat_id}`).")
+
+    elif cmd == "/expire_stale":
+        # Admin command: chạy thủ công để dọn đơn pending quá hạn
+        cancelled = expire_stale_orders()
+        if not cancelled:
+            tg_send(chat_id, f"Không có đơn pending nào quá {PENDING_TIMEOUT_MINUTES} phút.")
+        else:
+            lines = [f"Đã mark `expired` {len(cancelled)} đơn:"]
+            for c, _cid, sku in cancelled[:20]:
+                lines.append(f"· `{c}` ({sku})")
+            tg_send(chat_id, "\n".join(lines))
 
     elif cmd == "/sale_stats":
         # Thống kê doanh số nhanh
@@ -323,6 +394,9 @@ def handle_admin(chat_id, text):
             "*Lệnh admin:*\n\n"
             "*Vận hành đơn:*\n"
             "`/confirm TXNxxx` — confirm đơn thủ công (khi Sepay lỗi/delay)\n"
+            "  · Bot phân biệt rõ: not\\_found / expired / paid / pending\n"
+            "  · Timeout pending: " + str(PENDING_TIMEOUT_MINUTES) + " phút\n"
+            "`/expire_stale` — dọn đơn pending quá hạn (mark expired)\n"
             "`/unmatched` — xem 10 GD không khớp gần nhất\n\n"
             "*Cấu hình sản phẩm:*\n"
             "`/set_link <sku> <url>` — cập nhật link Drive\n"
@@ -380,7 +454,7 @@ def telegram_webhook():
 
     # Admin commands
     admin_cmds = ("/unmatched", "/set_link", "/admin_help",
-                  "/confirm", "/sale_stats")
+                  "/confirm", "/sale_stats", "/expire_stale")
     if any(text.startswith(c) for c in admin_cmds):
         handle_admin(chat_id, text)
         return jsonify({"ok": True})
@@ -400,7 +474,7 @@ def telegram_webhook():
         handle_lien_he(chat_id)
     else:
         tg_send(chat_id,
-                "Tôi chưa hiểu lệnh đó. Bạn vui lòng Gõ /start để xem menu chính.")
+                "Tôi chưa hiểu lệnh đó. Gõ /start để xem menu chính.")
 
     return jsonify({"ok": True})
 
@@ -475,11 +549,25 @@ def sepay_webhook():
                 f"Vui lòng chuyển bù hoặc liên hệ tác giả.")
         return jsonify({"ok": True, "msg": "Underpaid"})
 
-    # 6. Match successful — mark paid + deliver
-    drive_link = get_product_link(sku) or "[Link chưa cập nhật — Liên hệ tác giả]"
-    mark_order_paid(code, ref, drive_link)
-
+    # 6. Match successful
     prod = PRODUCTS.get(sku, {"name": sku})
+    drive_link = get_product_link(sku)
+    # Nếu admin CHƯA set link: KHÔNG mark paid (giữ pending để /confirm khôi phục được),
+    # báo khách chờ + cảnh báo admin gấp. Tránh giao link rác coi như đã xong.
+    if not drive_link:
+        tg_send(chat_id,
+                f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}* ✅\n"
+                f"Link tải đang được chuẩn bị, tác giả gửi cho bạn trong ít phút.\n"
+                f"Cần gấp? Gõ /lien\\_he.")
+        if ADMIN_CHAT_ID:
+            tg_send(ADMIN_CHAT_ID,
+                    f"🚨 ĐÃ THU TIỀN nhưng CHƯA set link Drive!\n"
+                    f"Đơn #{code} · {sku} · {amount:,}đ · ref:{ref}\n"
+                    f"Làm ngay: `/set_link {sku} <url>` → rồi `/confirm {code}` để gửi link cho khách.")
+        log.warning(f"Order {code} received money but no drive link for {sku} — kept pending")
+        return jsonify({"ok": True, "msg": "Paid received but link missing, kept pending"})
+
+    mark_order_paid(code, ref, drive_link)
     deliver_text = (
         f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}*.\n"
         f"Sản phẩm: *{prod['name']}*\n\n"
@@ -527,11 +615,16 @@ def vcb_email_webhook():
 
     log.info(f"VCB email received: {subject[:60]}")
 
-    # Chỉ xử lý email tiền VÀO (credit, biến động tăng)
-    is_credit = any(kw in body.lower() for kw in [
-        "tăng", "ghi có", "credit", "tien vao", "tiền vào", "phát sinh có",
+    # Chỉ xử lý email tiền VÀO (credit). Bao quát nhiều format VCB:
+    #  - có pattern "+<số> VND"  (dấu + = tiền vào; debit dùng "-" nên không lọt), HOẶC
+    #  - có keyword tiền vào.
+    body_low = body.lower()
+    has_plus_amount = bool(re.search(r"\+\s*[\d.,]+\s*vnd", body_low))
+    has_credit_kw = any(kw in body_low for kw in [
+        "ghi có", "tiền vào", "tien vao", "phát sinh có", "credit",
+        "biến động tăng", "số dư tăng", "ghi co",
     ])
-    if not is_credit:
+    if not (has_plus_amount or has_credit_kw):
         return jsonify({"ok": True, "msg": "Not credit email, skip"}), 200
 
     # Extract số tiền: tìm pattern "+xxx,xxx VND" hoặc "Số tiền: xxx,xxx"
@@ -587,11 +680,24 @@ def vcb_email_webhook():
             return jsonify({"ok": True, "msg": "Underpaid"}), 200
         # Nếu thừa tiền (khách CK dư) → vẫn deliver, log thừa cho admin tự xử lý
 
-    # Match thành công → mark paid + deliver
-    drive_link = get_product_link(sku) or "[Link chưa cập nhật — liên hệ tác giả]"
-    mark_order_paid(code, ref, drive_link)
-
+    # Match thành công
     prod = PRODUCTS.get(sku, {"name": sku})
+    drive_link = get_product_link(sku)
+    if not drive_link:
+        # Đã thu tiền nhưng admin chưa set link → giữ pending, báo khách chờ + alert admin gấp.
+        tg_send(chat_id,
+                f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}* ✅\n"
+                f"Link tải đang được chuẩn bị, tác giả gửi cho bạn trong ít phút.\n"
+                f"Cần gấp? Gõ /lien\\_he.")
+        if ADMIN_CHAT_ID:
+            tg_send(ADMIN_CHAT_ID,
+                    f"🚨 ĐÃ THU TIỀN (VCB email) nhưng CHƯA set link!\n"
+                    f"Đơn #{code} · {sku} · {amount:,}đ\n"
+                    f"Làm ngay: `/set_link {sku} <url>` → rồi `/confirm {code}`.")
+        log.warning(f"VCB-email: Order {code} money received but no link for {sku} — kept pending")
+        return jsonify({"ok": True, "msg": "Paid received but link missing, kept pending"}), 200
+
+    mark_order_paid(code, ref, drive_link)
     deliver_text = (
         f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}*.\n"
         f"Sản phẩm: *{prod['name']}*\n\n"
