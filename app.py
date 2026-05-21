@@ -24,7 +24,7 @@ from config import (
 from db import (
     init_db, create_order, mark_order_paid, get_pending_order_by_code, get_order_status, expire_stale_orders, PENDING_TIMEOUT_MINUTES,
     get_order_by_chat, log_unmatched_payment, get_unmatched_payments,
-    update_product_link, get_product_link
+    update_product_link, get_product_link, conn as db_conn
 )
 
 logging.basicConfig(
@@ -71,8 +71,11 @@ log.info("Database initialized.")
 # TELEGRAM HELPERS
 # ============================================================
 
+import time as _time
+
+
 def tg_send(chat_id, text, reply_markup=None):
-    """Gửi tin nhắn tới user qua Telegram Bot API."""
+    """Gửi tin nhắn tới user qua Telegram Bot API (có retry)."""
     payload = {
         "chat_id": chat_id,
         "text": text,
@@ -81,25 +84,23 @@ def tg_send(chat_id, text, reply_markup=None):
     }
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    try:
-        r = requests.post(f"{TG_API}/sendMessage", json=payload, timeout=10)
-        if not r.ok:
-            log.error(f"Telegram send failed: {r.status_code} {r.text}")
-            # Fallback CỰC QUAN TRỌNG: lỗi parse Markdown (400) thường do link Drive
-            # chứa '_' / '*' / '['. Gửi lại dạng plain-text để KHÔNG bao giờ mất tin
-            # (đặc biệt tin giao link cho khách đã trả tiền).
-            if r.status_code == 400:
+
+    for attempt in range(3):
+        try:
+            r = requests.post(f"{TG_API}/sendMessage", json=payload, timeout=10)
+            if r.ok:
+                return
+            log.error(f"Telegram send failed (attempt {attempt+1}): {r.status_code} {r.text}")
+            # Fallback: lỗi parse Markdown (400) thường do link Drive chứa '_' / '*' / '['.
+            if r.status_code == 400 and "parse_mode" in payload:
                 payload.pop("parse_mode", None)
-                try:
-                    r2 = requests.post(f"{TG_API}/sendMessage", json=payload, timeout=10)
-                    if r2.ok:
-                        log.info("Telegram: đã gửi lại thành công ở chế độ plain-text")
-                    else:
-                        log.error(f"Telegram plain-text retry vẫn lỗi: {r2.status_code} {r2.text}")
-                except Exception as e2:
-                    log.exception(f"Telegram plain-text retry exception: {e2}")
-    except Exception as e:
-        log.exception(f"Telegram send exception: {e}")
+                continue
+            if r.status_code in (429, 502, 503):
+                _time.sleep(1 + attempt)
+                continue
+        except Exception as e:
+            log.exception(f"Telegram send exception (attempt {attempt+1}): {e}")
+            _time.sleep(1 + attempt)
 
 
 def tg_send_photo(chat_id, photo_url, caption=None):
@@ -306,6 +307,9 @@ def handle_admin(chat_id, text):
         if sku not in PRODUCTS:
             tg_send(chat_id, f"SKU không tồn tại. Có: {list(PRODUCTS.keys())}")
             return
+        if not url.startswith(("https://", "http://")):
+            tg_send(chat_id, "URL không hợp lệ. Phải bắt đầu bằng http:// hoặc https://")
+            return
         update_product_link(sku, url)
         tg_send(chat_id, f"Đã cập nhật link cho *{sku}*:\n{url}")
 
@@ -378,9 +382,7 @@ def handle_admin(chat_id, text):
             tg_send(chat_id, "\n".join(lines))
 
     elif cmd == "/sale_stats":
-        # Thống kê doanh số nhanh
-        from db import conn as _conn
-        with _conn() as c:
+        with db_conn() as c:
             stats = c.execute(
                 "SELECT sku, COUNT(*) as cnt, SUM(amount) as total "
                 "FROM orders WHERE status='paid' GROUP BY sku"
@@ -492,26 +494,18 @@ def telegram_webhook():
 
 @app.route("/sepay-webhook", methods=["POST"])
 def sepay_webhook():
-    """
-    Nhận biến động ngân hàng từ Sepay.
-    Sepay xác thực bằng header: Authorization: Apikey {key}
-    """
-    # 0. Nếu chưa có SEPAY_API_KEY → đang ở chế độ Manual (Hướng A)
     if not SEPAY_API_KEY:
-        log.info("Sepay webhook called but SEPAY_API_KEY empty — manual mode, ignoring")
-        return jsonify({"ok": True, "msg": "Manual mode, Sepay disabled"}), 200
+        log.info("Sepay webhook called but SEPAY_API_KEY empty — manual mode")
+        return jsonify({"ok": True, "msg": "Manual mode"}), 200
 
-    # 1. Verify API key
     auth = request.headers.get("Authorization", "")
-    expected = f"Apikey {SEPAY_API_KEY}"
-    if auth != expected:
+    if auth != f"Apikey {SEPAY_API_KEY}":
         log.warning(f"Sepay webhook unauthorized: {auth[:20]}...")
         abort(401)
 
     data = request.get_json(silent=True) or {}
     log.info(f"Sepay webhook: {data.get('id')} amount={data.get('transferAmount')}")
 
-    # 2. Only handle incoming transfers
     if data.get("transferType") != "in":
         return jsonify({"ok": True, "msg": "Not incoming, skip"})
 
@@ -520,97 +514,12 @@ def sepay_webhook():
     ref = data.get("referenceCode", "")
     tx_id = data.get("id")
 
-    # 3. Extract order code from content
-    # Expected: "MUA TXNXXXX" or "MUATXNXXXX"
-    order_code = None
-    for token in content.replace(".", " ").replace(",", " ").split():
-        if token.startswith("TXN") and len(token) >= 6:
-            order_code = token
-            break
-        if token.startswith("MUA") and len(token) > 3:
-            # MUATXN123 case
-            candidate = token[3:]
-            if candidate.startswith("TXN"):
-                order_code = candidate
-                break
-
-    # 4. Match order
-    if not order_code:
-        log_unmatched_payment(tx_id, amount, content, ref)
-        notify_admin_unmatched(amount, content, ref, reason="Không tìm thấy mã đơn")
-        return jsonify({"ok": True, "msg": "No order code in content"})
-
-    order = get_pending_order_by_code(order_code)
-    if not order:
-        log_unmatched_payment(tx_id, amount, content, ref)
-        notify_admin_unmatched(amount, content, ref,
-                               reason=f"Mã đơn {order_code} không tồn tại hoặc đã thanh toán")
-        return jsonify({"ok": True, "msg": "Order not found or already paid"})
-
-    code, chat_id, sku, expected_amount, status = order
-
-    # 5. Verify amount
-    if amount < expected_amount:
-        # Underpaid — notify admin, don't deliver
-        log_unmatched_payment(tx_id, amount, content, ref)
-        notify_admin_unmatched(amount, content, ref,
-                               reason=f"Thiếu tiền: nhận {amount}, cần {expected_amount} (đơn #{code})")
-        tg_send(chat_id,
-                f"Đã nhận {amount:,}đ cho đơn #{code} nhưng *thiếu {expected_amount-amount:,}đ*.\n"
-                f"Vui lòng chuyển bù hoặc liên hệ anh Thuận.")
-        return jsonify({"ok": True, "msg": "Underpaid"})
-
-    # 6. Match successful
-    prod = PRODUCTS.get(sku, {"name": sku})
-    drive_link = resolve_drive_link(sku)
-    # Nếu admin CHƯA set link: KHÔNG mark paid (giữ pending để /confirm khôi phục được),
-    # báo khách chờ + cảnh báo admin gấp. Tránh giao link rác coi như đã xong.
-    if not drive_link:
-        tg_send(chat_id,
-                f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}* ✅\n"
-                f"Link tải đang được chuẩn bị, Anh Thuận sẽ gửi cho anh/chị trong ít phút.\n"
-                f"Anh/chị Cần gấp? Hãy nhắn Zalo/ gọi 0985438373 hoặc Gõ /lien\\_he.")
-        if ADMIN_CHAT_ID:
-            tg_send(ADMIN_CHAT_ID,
-                    f"🚨 ĐÃ THU TIỀN nhưng CHƯA set link Drive!\n"
-                    f"Đơn #{code} · {sku} · {amount:,}đ · ref:{ref}\n"
-                    f"Làm ngay: `/set_link {sku} <url>` → rồi `/confirm {code}` để gửi link cho khách.")
-        log.warning(f"Order {code} received money but no drive link for {sku} — kept pending")
-        return jsonify({"ok": True, "msg": "Paid received but link missing, kept pending"})
-
-    mark_order_paid(code, ref, drive_link)
-    deliver_text = (
-        f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}*.\n"
-        f"Sản phẩm: *{prod['name']}*\n\n"
-        f"*Link tải:*\n{drive_link}\n\n"
-        f"Cảm ơn Anh/chị đã mua hàng.\n"
-        f"Mọi vấn đề về sản phẩm, hãy gõ /lien\\_he.\n\n"
-        f"_Mã giao dịch ngân hàng: {ref}_"
-    )
-    tg_send(chat_id, deliver_text)
-
-    # Notify admin
-    if ADMIN_CHAT_ID:
-        tg_send(ADMIN_CHAT_ID,
-                f"NEW SALE: #{code} · {sku} · {amount:,}đ · ref:{ref}")
-
-    log.info(f"Order {code} delivered to chat {chat_id}, ref={ref}")
-    return jsonify({"ok": True, "msg": "Delivered"})
+    result = process_payment(amount, content, ref, source="Sepay")
+    return jsonify({"ok": result["ok"], "msg": result["msg"]}), result.get("http_status", 200)
 
 
 @app.route("/vcb-email", methods=["POST"])
 def vcb_email_webhook():
-    """
-    Nhận email biến động số dư VCB từ Google Apps Script.
-    Apps Script chạy mỗi 1 phút, đọc email từ VCB Digibank, POST tới đây.
-
-    Auth: header X-Auth-Token phải khớp env VCB_EMAIL_SECRET
-    Body JSON:
-    {
-      "subject": "VCB Digibank: Biến động số dư...",
-      "body": "Tài khoản: ...\nTăng: +199,000 VND\nNội dung: MUA TXNXXXXXX\n..."
-    }
-    """
     secret = os.environ.get("VCB_EMAIL_SECRET", "")
     if not secret:
         log.warning("VCB_EMAIL_SECRET not set, /vcb-email disabled")
@@ -621,14 +530,10 @@ def vcb_email_webhook():
         abort(401)
 
     data = request.get_json(silent=True) or {}
-    subject = (data.get("subject") or "").lower()
     body = data.get("body") or ""
+    log.info(f"VCB email received: {((data.get('subject') or '')[:60])}")
 
-    log.info(f"VCB email received: {subject[:60]}")
-
-    # Chỉ xử lý email tiền VÀO (credit). Bao quát nhiều format VCB:
-    #  - có pattern "+<số> VND"  (dấu + = tiền vào; debit dùng "-" nên không lọt), HOẶC
-    #  - có keyword tiền vào.
+    # Chỉ xử lý email credit (tiền vào)
     body_low = body.lower()
     has_plus_amount = bool(re.search(r"\+\s*[\d.,]+\s*vnd", body_low))
     has_credit_kw = any(kw in body_low for kw in [
@@ -638,14 +543,11 @@ def vcb_email_webhook():
     if not (has_plus_amount or has_credit_kw):
         return jsonify({"ok": True, "msg": "Not credit email, skip"}), 200
 
-    # Extract số tiền: tìm pattern "+xxx,xxx VND" hoặc "Số tiền: xxx,xxx"
+    # Extract số tiền
     amount = 0
-    # Pattern 1: +199,000 VND
     m = re.search(r"\+\s*([\d.,]+)\s*VND", body)
-    # Pattern 2: Số tiền: 199,000 / Số tiền: 199.000
     if not m:
         m = re.search(r"[Ss]ố tiền[:\s]*([\d.,]+)", body)
-    # Pattern 3: Tăng: 199,000
     if not m:
         m = re.search(r"[Tt]ăng[:\s]*([\d.,]+)", body)
     if m:
@@ -659,70 +561,15 @@ def vcb_email_webhook():
         log.warning("VCB email: cannot parse amount")
         return jsonify({"ok": True, "msg": "No amount found"}), 200
 
-    # Extract mã đơn TXN + 6-8 ký tự
-    code_match = re.search(r"TXN[A-Z0-9]{4,10}", body.upper())
+    # Extract reference
     ref_match = re.search(r"FT\d{10,15}", body.upper())
     ref = ref_match.group(0) if ref_match else f"VCB-EMAIL-{tx_id_safe()}"
 
-    if not code_match:
-        log_unmatched_payment(ref, amount, body[:200], ref)
-        notify_admin_unmatched(amount, body[:150], ref, reason="Không tìm thấy mã TXN trong email VCB")
-        return jsonify({"ok": True, "msg": "No order code"}), 200
+    # Content để match order
+    content = body.upper()
 
-    order_code = code_match.group(0)
-    order = get_pending_order_by_code(order_code)
-    if not order:
-        log_unmatched_payment(ref, amount, body[:200], ref)
-        notify_admin_unmatched(amount, body[:150], ref,
-                               reason=f"Mã {order_code} không tồn tại hoặc đã thanh toán")
-        return jsonify({"ok": True, "msg": "Order not found"}), 200
-
-    code, chat_id, sku, expected_amount, status = order
-
-    # Verify số tiền (cho phép sai số nhỏ ±100đ vì format)
-    if abs(amount - expected_amount) > 100:
-        if amount < expected_amount:
-            log_unmatched_payment(ref, amount, body[:200], ref)
-            notify_admin_unmatched(amount, body[:150], ref,
-                                   reason=f"Thiếu tiền: nhận {amount}, cần {expected_amount} (đơn #{code})")
-            tg_send(chat_id,
-                    f"Đã nhận {amount:,}đ cho đơn #{code} nhưng *thiếu {expected_amount-amount:,}đ*.\n"
-                    f"Vui lòng chuyển bù hoặc liên hệ tác giả.")
-            return jsonify({"ok": True, "msg": "Underpaid"}), 200
-        # Nếu thừa tiền (khách CK dư) → vẫn deliver, log thừa cho admin tự xử lý
-
-    # Match thành công
-    prod = PRODUCTS.get(sku, {"name": sku})
-    drive_link = resolve_drive_link(sku)
-    if not drive_link:
-        # Đã thu tiền nhưng admin chưa set link → giữ pending, báo khách chờ + alert admin gấp.
-        tg_send(chat_id,
-                f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}* ✅\n"
-                f"Link tải đang được chuẩn bị, Anh Thuận sẽ gửi cho anh/chị trong ít phút.\n"
-                f"Anh/chị Cần gấp? Hãy Gõ /lien\\_he.")
-        if ADMIN_CHAT_ID:
-            tg_send(ADMIN_CHAT_ID,
-                    f"🚨 ĐÃ THU TIỀN (VCB email) nhưng CHƯA set link!\n"
-                    f"Đơn #{code} · {sku} · {amount:,}đ\n"
-                    f"Làm ngay: `/set_link {sku} <url>` → rồi `/confirm {code}`.")
-        log.warning(f"VCB-email: Order {code} money received but no link for {sku} — kept pending")
-        return jsonify({"ok": True, "msg": "Paid received but link missing, kept pending"}), 200
-
-    mark_order_paid(code, ref, drive_link)
-    deliver_text = (
-        f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}*.\n"
-        f"Sản phẩm: *{prod['name']}*\n\n"
-        f"*Link tải:*\n{drive_link}\n\n"
-        f"Cảm ơn anh/chị đã mua hàng. Chúc anh /chị sẽ thực hành tốt và đạt được nhiều thành công.\n"
-        f"_Mã giao dịch: {ref}_"
-    )
-    tg_send(chat_id, deliver_text)
-
-    if ADMIN_CHAT_ID:
-        tg_send(ADMIN_CHAT_ID, f"AUTO SALE (VCB email): #{code} · {sku} · {amount:,}đ")
-
-    log.info(f"VCB-email: Order {code} auto-delivered, ref={ref}")
-    return jsonify({"ok": True, "msg": "Delivered"}), 200
+    result = process_payment(amount, content, ref, source="VCB-email")
+    return jsonify({"ok": result["ok"], "msg": result["msg"]}), result.get("http_status", 200)
 
 
 def tx_id_safe():
@@ -743,6 +590,84 @@ def notify_admin_unmatched(amount, content, ref, reason):
         f"Kiểm tra thủ công."
     )
     tg_send(ADMIN_CHAT_ID, text)
+
+
+def process_payment(amount, content, ref, source="unknown"):
+    """Xử lý thanh toán chung cho cả Sepay và VCB email.
+
+    Returns: dict với status và message để webhook trả về.
+    """
+    # 1. Extract order code
+    order_code = None
+    for token in content.upper().replace(".", " ").replace(",", " ").split():
+        if token.startswith("TXN") and len(token) >= 6:
+            order_code = token
+            break
+        if token.startswith("MUA") and len(token) > 3:
+            candidate = token[3:]
+            if candidate.startswith("TXN"):
+                order_code = candidate
+                break
+
+    if not order_code:
+        log_unmatched_payment(ref, amount, content[:200], ref)
+        notify_admin_unmatched(amount, content[:150], ref, reason="Không tìm thấy mã đơn")
+        return {"ok": True, "msg": "No order code", "http_status": 200}
+
+    # 2. Look up pending order
+    order = get_pending_order_by_code(order_code)
+    if not order:
+        log_unmatched_payment(ref, amount, content[:200], ref)
+        notify_admin_unmatched(amount, content[:150], ref,
+                               reason=f"Mã {order_code} không tồn tại hoặc đã thanh toán")
+        return {"ok": True, "msg": "Order not found or already paid", "http_status": 200}
+
+    code, chat_id, sku, expected_amount, status = order
+
+    # 3. Verify amount (cho phép sai số ±100đ)
+    if amount < expected_amount - 100:
+        log_unmatched_payment(ref, amount, content[:200], ref)
+        notify_admin_unmatched(amount, content[:150], ref,
+                               reason=f"Thiếu tiền: nhận {amount}, cần {expected_amount} (đơn #{code})")
+        tg_send(chat_id,
+                f"Đã nhận {amount:,}đ cho đơn #{code} nhưng *thiếu {expected_amount-amount:,}đ*.\n"
+                f"Vui lòng chuyển bù hoặc liên hệ tác giả.")
+        return {"ok": True, "msg": "Underpaid", "http_status": 200}
+
+    # 4. Resolve drive link
+    prod = PRODUCTS.get(sku, {"name": sku})
+    drive_link = resolve_drive_link(sku)
+    if not drive_link:
+        tg_send(chat_id,
+                f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}* ✅\n"
+                f"Link tải đang được chuẩn bị, anh Thuận sẽ gửi cho anh/chị trong ít phút.\n"
+                f"Anh/chị Cần gấp? Hãy Gõ /lien\\_he.")
+        if ADMIN_CHAT_ID:
+            tg_send(ADMIN_CHAT_ID,
+                    f"🚨 ĐÃ THU TIỀN ({source}) nhưng CHƯA set link Drive!\n"
+                    f"Đơn #{code} · {sku} · {amount:,}đ · ref:{ref}\n"
+                    f"Làm ngay: `/set_link {sku} <url>` → rồi `/confirm {code}`.")
+        log.warning(f"{source}: Order {code} money received but no link for {sku} — kept pending")
+        return {"ok": True, "msg": "Link missing, kept pending", "http_status": 200}
+
+    # 5. Mark paid + deliver
+    mark_order_paid(code, ref, drive_link)
+    deliver_text = (
+        f"Đã nhận thanh toán *{amount:,}đ* cho đơn *#{code}*.\n"
+        f"Sản phẩm: *{prod['name']}*\n\n"
+        f"*Link tải:*\n{drive_link}\n\n"
+        f"Cảm ơn anh/chị đã mua hàng.\n"
+        f"Mọi vấn đề về sản phẩm, hãy gõ /lien\\_he.\n\n"
+        f"_Mã giao dịch: {ref}_"
+    )
+    tg_send(chat_id, deliver_text)
+
+    if ADMIN_CHAT_ID:
+        tg_send(ADMIN_CHAT_ID,
+                f"{source}: #{code} · {sku} · {amount:,}đ · ref:{ref}")
+
+    log.info(f"{source}: Order {code} auto-delivered, ref={ref}")
+    return {"ok": True, "msg": "Delivered", "http_status": 200}
 
 
 # ============================================================

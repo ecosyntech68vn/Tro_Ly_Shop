@@ -153,7 +153,7 @@ def get_order_by_chat(chat_id):
     """Lấy đơn gần nhất của 1 chat. Returns: (code, sku, amount, status, drive_link) or None"""
     with conn() as c:
         row = c.execute(
-            "SELECT code, sku, amount, drive_link FROM orders "
+            "SELECT code, sku, amount, status, drive_link FROM orders "
             "WHERE chat_id=? ORDER BY created_at DESC LIMIT 1",
             (chat_id,)
         ).fetchone()
