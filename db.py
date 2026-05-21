@@ -1,28 +1,98 @@
 """
-SQLite database layer cho bot.
-Tables:
-  orders            — đơn hàng pending/paid
-  unmatched         — giao dịch không khớp (admin review)
-  product_links     — link Drive cho mỗi SKU (cập nhật được)
+Database layer cho bot — hỗ trợ SQLite (dev) và PostgreSQL (production).
+Tự động dùng PostgreSQL nếu có DATABASE_URL, fallback SQLite nếu không.
 """
-import sqlite3
 import os
+import re
 import string
 import random
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 
 DB_PATH = os.environ.get("DB_PATH", "bot.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-# Đơn pending quá X phút sẽ tự chuyển sang 'expired' khi query
-# Set qua Railway Variable: PENDING_TIMEOUT_MINUTES=120 (default 120 phút)
 PENDING_TIMEOUT_MINUTES = int(os.environ.get("PENDING_TIMEOUT_MINUTES", "120"))
+
+USE_PG = bool(DATABASE_URL)
+
+
+def _pg_connect():
+    import psycopg2
+    return psycopg2.connect(DATABASE_URL)
+
+
+def _sqlite_connect():
+    import sqlite3
+    c = sqlite3.connect(DB_PATH)
+    c.row_factory = sqlite3.Row
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA busy_timeout=5000")
+    return c
+
+
+def _db():
+    if USE_PG:
+        import psycopg2
+        c = psycopg2.connect(DATABASE_URL)
+        return c
+    else:
+        import sqlite3
+        c = sqlite3.connect(DB_PATH)
+        c.row_factory = sqlite3.Row
+        c.execute("PRAGMA journal_mode=WAL")
+        c.execute("PRAGMA busy_timeout=5000")
+        return c
+
+
+class _DB:
+    """Wrapper đồng bộ SQLite và PostgreSQL."""
+    def __init__(self, conn):
+        self._conn = conn
+        self._pg = USE_PG
+        if USE_PG:
+            import psycopg2.extras
+            self._cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        else:
+            self._cur = conn  # sqlite3 conn acts as cursor via execute()
+
+    def execute(self, sql, params=None):
+        if self._pg:
+            pg_sql = re.sub(r"(?<!\?)\?(?!\?)", "%s", sql)
+            self._cur.execute(pg_sql, params or ())
+            return self._cur
+        else:
+            return self._conn.execute(sql, params or ())
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        if self._pg:
+            self._cur.close()
+        self._conn.close()
 
 
 @contextmanager
 def conn():
-    c = sqlite3.connect(DB_PATH)
-    c.row_factory = sqlite3.Row
+    db = _DB(_db())
+    try:
+        yield db
+        db.commit()
+    finally:
+        db.close()
+
+
+def _q(sql):
+    """Chuyển placeholder ? -> %s cho PostgreSQL."""
+    if not USE_PG:
+        return sql
+    return re.sub(r"(?<!\?)\?(?!\?)", "%s", sql)
+
+
+@contextmanager
+def conn():
+    c = _db()
     try:
         yield c
         c.commit()
@@ -30,9 +100,30 @@ def conn():
         c.close()
 
 
+def _exec(ddl_sqlite, ddl_pg=None):
+    """Execute DDL script, tự động chọn dialect theo database."""
+    ddl = ddl_pg if USE_PG else ddl_sqlite
+    if USE_PG:
+        import psycopg2
+        c = psycopg2.connect(DATABASE_URL)
+        cur = c.cursor()
+        for stmt in ddl.split(";"):
+            s = stmt.strip()
+            if s:
+                cur.execute(s)
+        c.commit()
+        cur.close()
+        c.close()
+    else:
+        import sqlite3
+        c = sqlite3.connect(DB_PATH)
+        c.executescript(ddl)
+        c.close()
+
+
 def init_db():
-    with conn() as c:
-        c.executescript("""
+    _exec(
+        """
         CREATE TABLE IF NOT EXISTS orders (
             code         TEXT PRIMARY KEY,
             chat_id      INTEGER NOT NULL,
@@ -61,7 +152,38 @@ def init_db():
             url          TEXT,
             updated_at   TEXT
         );
-        """)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS orders (
+            code         TEXT PRIMARY KEY,
+            chat_id      BIGINT NOT NULL,
+            sku          TEXT NOT NULL,
+            amount       INTEGER NOT NULL,
+            status       TEXT NOT NULL DEFAULT 'pending',
+            bank_ref     TEXT,
+            drive_link   TEXT,
+            created_at   TEXT NOT NULL,
+            paid_at      TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_orders_chat ON orders(chat_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+
+        CREATE TABLE IF NOT EXISTS unmatched (
+            id           SERIAL PRIMARY KEY,
+            tx_id        TEXT,
+            amount       INTEGER,
+            content      TEXT,
+            bank_ref     TEXT,
+            ts           TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS product_links (
+            sku          TEXT PRIMARY KEY,
+            url          TEXT,
+            updated_at   TEXT
+        );
+        """
+    )
 
 
 def gen_code():
@@ -237,11 +359,18 @@ def get_today_stats():
 
 def update_product_link(sku, url):
     with conn() as c:
-        c.execute(
-            "INSERT INTO product_links(sku, url, updated_at) VALUES(?, ?, ?) "
-            "ON CONFLICT(sku) DO UPDATE SET url=excluded.url, updated_at=excluded.updated_at",
-            (sku, url, datetime.utcnow().isoformat())
-        )
+        if USE_PG:
+            c.execute(
+                "INSERT INTO product_links(sku, url, updated_at) VALUES(?, ?, ?) "
+                "ON CONFLICT(sku) DO UPDATE SET url=EXCLUDED.url, updated_at=EXCLUDED.updated_at",
+                (sku, url, datetime.utcnow().isoformat())
+            )
+        else:
+            c.execute(
+                "INSERT INTO product_links(sku, url, updated_at) VALUES(?, ?, ?) "
+                "ON CONFLICT(sku) DO UPDATE SET url=excluded.url, updated_at=excluded.updated_at",
+                (sku, url, datetime.utcnow().isoformat())
+            )
 
 
 def get_product_link(sku):
