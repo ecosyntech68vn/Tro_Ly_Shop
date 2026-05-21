@@ -188,6 +188,53 @@ def get_unmatched_payments(limit=10):
         return [tuple(r) for r in rows]
 
 
+def get_unmatched_payments_page(page=0, page_size=5):
+    """Paginated unmatched payments. Returns (rows, total_count)."""
+    offset = page * page_size
+    with conn() as c:
+        total = c.execute("SELECT COUNT(*) FROM unmatched").fetchone()[0]
+        rows = c.execute(
+            "SELECT tx_id, amount, content, bank_ref, ts FROM unmatched "
+            "ORDER BY id DESC LIMIT ? OFFSET ?",
+            (page_size, offset)
+        ).fetchall()
+        return [tuple(r) for r in rows], total
+
+
+def get_today_stats():
+    """Thống kê hôm nay. Returns dict."""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    with conn() as c:
+        today_orders = c.execute(
+            "SELECT COUNT(*) FROM orders WHERE status='paid' AND paid_at >= ?",
+            (today,)
+        ).fetchone()[0]
+        today_revenue = c.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM orders WHERE status='paid' AND paid_at >= ?",
+            (today,)
+        ).fetchone()[0]
+        total_paid = c.execute(
+            "SELECT COUNT(*) FROM orders WHERE status='paid'"
+        ).fetchone()[0]
+        total_revenue = c.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM orders WHERE status='paid'"
+        ).fetchone()[0]
+        pending = c.execute(
+            "SELECT COUNT(*) FROM orders WHERE status='pending'"
+        ).fetchone()[0]
+        unmatched = c.execute(
+            "SELECT COUNT(*) FROM unmatched"
+        ).fetchone()[0]
+    return {
+        "today_orders": today_orders,
+        "today_revenue": today_revenue,
+        "total_paid": total_paid,
+        "total_revenue": total_revenue,
+        "pending": pending,
+        "unmatched": unmatched,
+    }
+
+
 def update_product_link(sku, url):
     with conn() as c:
         c.execute(

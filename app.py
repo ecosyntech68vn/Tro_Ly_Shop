@@ -24,6 +24,7 @@ from config import (
 from db import (
     init_db, create_order, mark_order_paid, get_pending_order_by_code, get_order_status, expire_stale_orders, PENDING_TIMEOUT_MINUTES,
     get_order_by_chat, log_unmatched_payment, get_unmatched_payments,
+    get_unmatched_payments_page, get_today_stats,
     update_product_link, get_product_link, conn as db_conn
 )
 
@@ -132,6 +133,19 @@ def tg_keyboard():
             [{"text": "Mua OpenCode (149.000đ)", "callback_data": "mua_opencode"}],
             [{"text": "Kiểm tra đơn", "callback_data": "trang_thai"}],
             [{"text": "Liên hệ tác giả", "callback_data": "lien_he"}],
+        ]
+    }
+
+
+def tg_admin_keyboard():
+    """Inline keyboard cho menu admin."""
+    return {
+        "inline_keyboard": [
+            [{"text": "Thống kê hôm nay", "callback_data": "admin_today"},
+             {"text": "Sale stats", "callback_data": "admin_stats"}],
+            [{"text": "Giao dịch không khớp", "callback_data": "admin_unmatched_0"},
+             {"text": "Dọn đơn hết hạn", "callback_data": "admin_expire"}],
+            [{"text": "Hướng dẫn", "callback_data": "admin_help"}],
         ]
     }
 
@@ -291,15 +305,25 @@ def handle_admin(chat_id, text):
     parts = text.strip().split()
     cmd = parts[0].lower()
 
+    if cmd == "/admin":
+        tg_send(chat_id, "*Panel quản trị* — Chọn chức năng:", reply_markup=tg_admin_keyboard())
+        return
+
     if cmd == "/unmatched":
-        rows = get_unmatched_payments(limit=10)
+        rows, total = get_unmatched_payments_page(0, 5)
         if not rows:
             tg_send(chat_id, "Không có giao dịch không khớp.")
             return
-        msg = "*Giao dịch không khớp (10 gần nhất):*\n\n"
+        msg = f"*Giao dịch không khớp* (trang 1/{max(1,(total-1)//5+1)} — {total} GD):\n\n"
         for tx_id, amount, content, ref, ts in rows:
-            msg += f"`{ts}` — {amount:,}đ — {content} — ref:{ref}\n"
-        tg_send(chat_id, msg)
+            msg += f"`{ts}` — {amount:,}đ — {content}\n"
+        kb = {
+            "inline_keyboard": [
+                [{"text": "Tiếp →", "callback_data": "admin_unmatched_1"}],
+                [{"text": "◀ Về menu", "callback_data": "admin_back"}],
+            ]
+        } if total > 5 else {"inline_keyboard": [[{"text": "◀ Về menu", "callback_data": "admin_back"}]]}
+        tg_send(chat_id, msg, reply_markup=kb)
 
     elif cmd == "/set_link" and len(parts) >= 3:
         sku = parts[1]
@@ -314,64 +338,49 @@ def handle_admin(chat_id, text):
         tg_send(chat_id, f"Đã cập nhật link cho *{sku}*:\n{url}")
 
     elif cmd == "/confirm" and len(parts) >= 2:
-        # Manual fallback: admin confirm thủ công khi Sepay/email VCB lỗi/delay
-        # Strip ký tự '#' nếu admin gõ kèm (vd /confirm #TXNxxx)
         code = parts[1].upper().lstrip("#").strip()
         info = get_order_status(code)
 
         if info["status"] == "not_found":
             tg_send(chat_id,
-                    f"⚠️ Không tìm thấy đơn *#{code}* trong hệ thống.\n\n"
-                    f"Kiểm tra lại:\n"
-                    f"· Mã đơn có đúng không (3 chữ TXN + 6 ký tự)?\n"
-                    f"· Khách đã gõ /mua\\_xxx để tạo đơn chưa?\n\n"
-                    f"Xem /unmatched để kiểm tra giao dịch lạ.")
+                    f"⚠️ Không tìm thấy đơn *#{code}*.\n\n"
+                    f"Kiểm tra lại mã đơn hoặc xem /unmatched.")
             return
 
         if info["status"] == "expired":
             mins = info.get("minutes_ago", 0)
             tg_send(chat_id,
-                    f"⌛ Đơn *#{code}* đã hết hạn ({mins} phút trước, quá {PENDING_TIMEOUT_MINUTES} phút).\n\n"
-                    f"Đơn này đã được mark `expired` — không thể confirm nữa.\n"
-                    f"Hỏi khách gõ lại /mua\\_combo (hoặc /mua\\_claude, /mua\\_opencode) để tạo đơn mới, sau đó CK + /confirm trong vòng {PENDING_TIMEOUT_MINUTES} phút.")
+                    f"⌛ Đơn *#{code}* đã hết hạn ({mins} phút trước).\n"
+                    f"Hỏi khách tạo đơn mới rồi CK + /confirm lại.")
             return
 
         if info["status"] == "paid":
             tg_send(chat_id,
-                    f"✅ Đơn *#{code}* ĐÃ được thanh toán từ trước.\n"
-                    f"Paid at: `{info.get('paid_at', '?')}`\n"
-                    f"Không cần confirm lại — link đã gửi cho khách rồi.")
+                    f"✅ Đơn *#{code}* ĐÃ thanh toán rồi (paid at: `{info.get('paid_at', '?')}`).")
             return
 
-        # status = pending (chưa hết hạn) → tiến hành confirm
         customer_chat_id = info["chat_id"]
         sku = info["sku"]
         expected_amount = info["amount"]
         drive_link = resolve_drive_link(sku)
-        # Chặn confirm nếu chưa set link: tránh mark paid + gửi placeholder rác cho khách.
         if not drive_link:
             tg_send(chat_id,
-                    f"⚠️ Chưa có link Drive cho *{sku}* — đơn *#{code}* CHƯA bị mark paid.\n\n"
-                    f"Set link trước rồi /confirm lại:\n"
-                    f"`/set_link {sku} <url_drive>`")
+                    f"⚠️ Chưa có link Drive cho *{sku}* — set link trước:\n"
+                    f"`/set_link {sku} <url>`")
             return
         mark_order_paid(code, f"MANUAL-{chat_id}", drive_link)
 
         prod = PRODUCTS.get(sku, {"name": sku})
-        # Gửi cho khách
         tg_send(customer_chat_id,
                 f"Đã nhận thanh toán *{expected_amount:,}đ* cho đơn *#{code}*.\n"
                 f"Sản phẩm: *{prod['name']}*\n\n"
                 f"*Link tải:*\n{drive_link}\n\n"
-                f"Cảm ơn anh/chị đã mua hàng. Chúc anh chị thực hành tốt và đạt được nhiều thành công.\n"
-                f"Mọi vấn đề về sản phẩm, anh/chị gõ /lien\\_he.")
-        # Báo admin
+                f"Cảm ơn anh/chị đã mua hàng.")
         tg_send(chat_id,
-                f"✅ Đã confirm đơn *#{code}* (manual) — {prod['name']} — {expected_amount:,}đ.\n"
-                f"Đã gửi link cho khách (chat\\_id: `{customer_chat_id}`).")
+                f"✅ Đã confirm đơn *#{code}* — {prod['name']} — {expected_amount:,}đ.\n"
+                f"Đã gửi link cho khách.")
 
     elif cmd == "/expire_stale":
-        # Admin command: chạy thủ công để dọn đơn pending quá hạn
         cancelled = expire_stale_orders()
         if not cancelled:
             tg_send(chat_id, f"Không có đơn pending nào quá {PENDING_TIMEOUT_MINUTES} phút.")
@@ -382,46 +391,114 @@ def handle_admin(chat_id, text):
             tg_send(chat_id, "\n".join(lines))
 
     elif cmd == "/sale_stats":
-        with db_conn() as c:
-            stats = c.execute(
-                "SELECT sku, COUNT(*) as cnt, SUM(amount) as total "
-                "FROM orders WHERE status='paid' GROUP BY sku"
-            ).fetchall()
-            pending = c.execute("SELECT COUNT(*) FROM orders WHERE status='pending'").fetchone()[0]
-        msg = "*Thống kê doanh số:*\n\n"
-        if not stats:
-            msg += "_Chưa có đơn nào được thanh toán._\n"
-        else:
-            total_revenue = 0
-            for row in stats:
-                sku, cnt, total = row["sku"], row["cnt"], row["total"]
-                prod_name = PRODUCTS.get(sku, {}).get("name", sku)
-                msg += f"• *{prod_name}*: {cnt} đơn — {total:,}đ\n"
-                total_revenue += total
-            msg += f"\n*Tổng doanh thu:* {total_revenue:,}đ"
-        msg += f"\n*Đơn pending:* {pending}"
-        tg_send(chat_id, msg)
+        send_sale_stats(chat_id)
 
     elif cmd == "/admin_help":
         msg = (
             "*Lệnh admin:*\n\n"
-            "*Vận hành đơn:*\n"
-            "`/confirm TXNxxx` — confirm đơn thủ công (khi Sepay lỗi/delay)\n"
-            "  · Bot phân biệt rõ: not\\_found / expired / paid / pending\n"
-            "  · Timeout pending: " + str(PENDING_TIMEOUT_MINUTES) + " phút\n"
-            "`/expire_stale` — dọn đơn pending quá hạn (mark expired)\n"
-            "`/unmatched` — xem 10 GD không khớp gần nhất\n\n"
-            "*Cấu hình sản phẩm:*\n"
+            "*Vận hành:*\n"
+            "`/admin` — menu quản trị (có nút bấm)\n"
+            "`/confirm TXNxxx` — confirm đơn thủ công\n"
+            "`/expire_stale` — dọn đơn pending quá hạn\n"
+            "`/unmatched` — GD không khớp (có phân trang)\n\n"
+            "*Cấu hình:*\n"
             "`/set_link <sku> <url>` — cập nhật link Drive\n"
-            "  SKU: `mua_combo` | `mua_claude` | `mua_opencode`\n\n"
+            "  SKU: `mua_combo`, `mua_claude`, `mua_opencode`\n\n"
             "*Báo cáo:*\n"
-            "`/sale_stats` — doanh số theo SKU\n\n"
-            "`/admin_help` — xem trợ giúp này"
+            "`/sale_stats` — doanh số theo SKU\n"
+            "`/admin_today` — thống kê hôm nay"
         )
         tg_send(chat_id, msg)
 
     else:
-        tg_send(chat_id, "Lệnh admin không hợp lệ. Gõ /admin\\_help.")
+        tg_send(chat_id, "Lệnh admin không hợp lệ. Gõ /admin\\_help hoặc /admin để mở menu.")
+
+
+def send_sale_stats(chat_id):
+    """Gửi thống kê doanh số chi tiết."""
+    with db_conn() as c:
+        stats = c.execute(
+            "SELECT sku, COUNT(*) as cnt, SUM(amount) as total "
+            "FROM orders WHERE status='paid' GROUP BY sku"
+        ).fetchall()
+        pending = c.execute("SELECT COUNT(*) FROM orders WHERE status='pending'").fetchone()[0]
+    msg = "*Thống kê doanh số:*\n\n"
+    if not stats:
+        msg += "_Chưa có đơn nào được thanh toán._\n"
+    else:
+        total_revenue = 0
+        for row in stats:
+            sku, cnt, total = row["sku"], row["cnt"], row["total"]
+            prod_name = PRODUCTS.get(sku, {}).get("name", sku)
+            msg += f"• *{prod_name}*: {cnt} đơn — {total:,}đ\n"
+            total_revenue += total
+        msg += f"\n*Tổng doanh thu:* {total_revenue:,}đ"
+    msg += f"\n*Đơn pending:* {pending}"
+    tg_send(chat_id, msg)
+
+
+def handle_admin_callback(chat_id, data):
+    """Xử lý callback từ menu admin."""
+    if str(chat_id) != str(ADMIN_CHAT_ID):
+        return
+
+    if data == "admin_back":
+        tg_send(chat_id, "*Panel quản trị* — Chọn chức năng:", reply_markup=tg_admin_keyboard())
+        return
+
+    if data == "admin_help":
+        handle_admin(chat_id, "/admin_help")
+        return
+
+    if data == "admin_stats":
+        send_sale_stats(chat_id)
+        tg_send(chat_id, "Menu admin:", reply_markup=tg_admin_keyboard())
+        return
+
+    if data == "admin_expire":
+        handle_admin(chat_id, "/expire_stale")
+        tg_send(chat_id, "Menu admin:", reply_markup=tg_admin_keyboard())
+        return
+
+    if data == "admin_today":
+        s = get_today_stats()
+        msg = (
+            f"*Thống kê hôm nay*\n\n"
+            f"📦 Đơn hôm nay: {s['today_orders']}\n"
+            f"💰 Doanh thu hôm nay: {s['today_revenue']:,}đ\n\n"
+            f"*Tổng quan*\n"
+            f"✅ Đã thanh toán: {s['total_paid']}\n"
+            f"💵 Tổng doanh thu: {s['total_revenue']:,}đ\n"
+            f"⏳ Đang chờ: {s['pending']}\n"
+            f"⚠️ GD không khớp: {s['unmatched']}"
+        )
+        tg_send(chat_id, msg, reply_markup=tg_admin_keyboard())
+        return
+
+    if data.startswith("admin_unmatched_"):
+        try:
+            page = int(data.split("_")[2])
+        except (IndexError, ValueError):
+            page = 0
+        rows, total = get_unmatched_payments_page(page, 5)
+        if not rows:
+            tg_send(chat_id, "Không có giao dịch không khớp.")
+            return
+        total_pages = max(1, (total - 1) // 5 + 1)
+        msg = f"*GD không khớp* (trang {page+1}/{total_pages} — {total} GD):\n\n"
+        for tx_id, amount, content, ref, ts in rows:
+            msg += f"`{ts}` — {amount:,}đ — {content}\n"
+        kb = {"inline_keyboard": []}
+        nav = []
+        if page > 0:
+            nav.append({"text": "← Trước", "callback_data": f"admin_unmatched_{page-1}"})
+        if page < total_pages - 1:
+            nav.append({"text": "Tiếp →", "callback_data": f"admin_unmatched_{page+1}"})
+        if nav:
+            kb["inline_keyboard"].append(nav)
+        kb["inline_keyboard"].append([{"text": "◀ Về menu", "callback_data": "admin_back"}])
+        tg_send(chat_id, msg, reply_markup=kb)
+        return
 
 
 # ============================================================
@@ -448,7 +525,9 @@ def telegram_webhook():
         requests.post(f"{TG_API}/answerCallbackQuery",
                       json={"callback_query_id": cq["id"]}, timeout=5)
 
-        if data.startswith("mua_"):
+        if data.startswith("admin_"):
+            handle_admin_callback(chat_id, data)
+        elif data.startswith("mua_"):
             handle_mua(chat_id, data)
         elif data == "trang_thai":
             handle_trang_thai(chat_id)
@@ -467,7 +546,8 @@ def telegram_webhook():
 
     # Admin commands
     admin_cmds = ("/unmatched", "/set_link", "/admin_help",
-                  "/confirm", "/sale_stats", "/expire_stale")
+                  "/confirm", "/sale_stats", "/expire_stale",
+                  "/admin", "/admin_today")
     if any(text.startswith(c) for c in admin_cmds):
         handle_admin(chat_id, text)
         return jsonify({"ok": True})
