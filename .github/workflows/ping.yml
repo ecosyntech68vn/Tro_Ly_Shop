@@ -1,0 +1,11 @@
+name: Keep Alive
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -sS --connect-timeout 10 "https://bot-aithucchien-production-ee5f.up.railway.app/" > /dev/null || true
