@@ -24,7 +24,7 @@ from config import (
 from db import (
     init_db, create_order, mark_order_paid, get_pending_order_by_code, get_order_status, expire_stale_orders, PENDING_TIMEOUT_MINUTES,
     get_order_by_chat, log_unmatched_payment, get_unmatched_payments,
-    get_unmatched_payments_page, get_today_stats,
+    get_unmatched_payments_page, get_today_stats, get_pending_orders, get_recent_orders,
     update_product_link, get_product_link, conn as db_conn
 )
 
@@ -141,11 +141,14 @@ def tg_admin_keyboard():
     """Inline keyboard cho menu admin."""
     return {
         "inline_keyboard": [
-            [{"text": "Thống kê hôm nay", "callback_data": "admin_today"},
-             {"text": "Sale stats", "callback_data": "admin_stats"}],
-            [{"text": "Giao dịch không khớp", "callback_data": "admin_unmatched_0"},
-             {"text": "Dọn đơn hết hạn", "callback_data": "admin_expire"}],
-            [{"text": "Hướng dẫn", "callback_data": "admin_help"}],
+            [{"text": "📊 Thống kê hôm nay", "callback_data": "admin_today"},
+             {"text": "💰 Sale stats", "callback_data": "admin_stats"}],
+            [{"text": "⏳ Đơn chờ", "callback_data": "admin_pending_0"},
+             {"text": "📋 Đơn gần đây", "callback_data": "admin_recent"}],
+            [{"text": "⚠️ GD không khớp", "callback_data": "admin_unmatched_0"},
+             {"text": "🔗 Set link", "callback_data": "admin_setlink"}],
+            [{"text": "🧹 Dọn đơn hết hạn", "callback_data": "admin_expire"},
+             {"text": "📖 Hướng dẫn", "callback_data": "admin_help"}],
         ]
     }
 
@@ -437,6 +440,8 @@ def send_sale_stats(chat_id):
     tg_send(chat_id, msg)
 
 
+ADMIN_STATE = {}
+
 def handle_admin_callback(chat_id, data):
     """Xử lý callback từ menu admin."""
     if str(chat_id) != str(ADMIN_CHAT_ID):
@@ -473,6 +478,74 @@ def handle_admin_callback(chat_id, data):
             f"⚠️ GD không khớp: {s['unmatched']}"
         )
         tg_send(chat_id, msg, reply_markup=tg_admin_keyboard())
+        return
+
+    if data == "admin_recent":
+        orders = get_recent_orders(7)
+        if not orders:
+            tg_send(chat_id, "Không có đơn nào trong 7 ngày qua.", reply_markup=tg_admin_keyboard())
+            return
+        msg = "*Đơn hàng 7 ngày qua:*\n\n"
+        for code, sku, amount, status, created, paid in orders:
+            prod = PRODUCTS.get(sku, {}).get("name", sku)
+            icon = "✅" if status == "paid" else "⏳" if status == "pending" else "⌛"
+            msg += f"{icon} `{code}` — {prod} — {amount:,}đ — {status}\n"
+        tg_send(chat_id, msg, reply_markup=tg_admin_keyboard())
+        return
+
+    if data == "admin_setlink":
+        kb = {"inline_keyboard": []}
+        for sku, prod in PRODUCTS.items():
+            current = get_product_link(sku)
+            label = f"{prod['name']} {'✅' if current else '❌'}"
+            kb["inline_keyboard"].append([{"text": label, "callback_data": f"admin_link_{sku}"}])
+        kb["inline_keyboard"].append([{"text": "◀ Về menu", "callback_data": "admin_back"}])
+        tg_send(chat_id, "*Chọn sản phẩm để đặt link:*", reply_markup=kb)
+        return
+
+    if data.startswith("admin_link_"):
+        sku = data.replace("admin_link_", "")
+        prod = PRODUCTS.get(sku)
+        if not prod:
+            return
+        current = get_product_link(sku)
+        msg = f"*Set link cho:* {prod['name']} (`{sku}`)\n"
+        if current:
+            msg += f"Link hiện tại: {current}\n\n"
+        msg += "Gõ link mới (bắt đầu bằng https://):"
+        ADMIN_STATE[chat_id] = {"action": "setlink", "sku": sku}
+        tg_send(chat_id, msg)
+        return
+
+    if data.startswith("admin_confirm_"):
+        code = data.replace("admin_confirm_", "")
+        handle_admin(chat_id, f"/confirm {code}")
+        return
+
+    if data.startswith("admin_pending_"):
+        page = int(data.split("_")[2]) if data.count("_") >= 2 else 0
+        rows, total = get_pending_orders(page, 5)
+        if not rows:
+            tg_send(chat_id, "Không có đơn chờ xử lý.", reply_markup=tg_admin_keyboard())
+            return
+        total_pages = max(1, (total - 1) // 5 + 1)
+        msg = f"*Đơn chờ* (trang {page+1}/{total_pages} — {total} đơn):\n\n"
+        kb = {"inline_keyboard": []}
+        for code, cid, sku, amount, created in rows:
+            prod = PRODUCTS.get(sku, {}).get("name", sku)
+            msg += f"⏳ `{code}` — {prod} — {amount:,}đ\n"
+            kb["inline_keyboard"].append([
+                {"text": f"✅ Confirm {code}", "callback_data": f"admin_confirm_{code}"}
+            ])
+        nav = []
+        if page > 0:
+            nav.append({"text": "← Trước", "callback_data": f"admin_pending_{page-1}"})
+        if page < total_pages - 1:
+            nav.append({"text": "Tiếp →", "callback_data": f"admin_pending_{page+1}"})
+        if nav:
+            kb["inline_keyboard"].append(nav)
+        kb["inline_keyboard"].append([{"text": "◀ Về menu", "callback_data": "admin_back"}])
+        tg_send(chat_id, msg, reply_markup=kb)
         return
 
     if data.startswith("admin_unmatched_"):
@@ -543,6 +616,19 @@ def telegram_webhook():
     chat_id = msg["chat"]["id"]
     text = msg.get("text", "").strip()
     first_name = msg["from"].get("first_name", "bạn")
+
+    # Admin state handling (set link flow)
+    if str(chat_id) == str(ADMIN_CHAT_ID) and chat_id in ADMIN_STATE:
+        state = ADMIN_STATE[chat_id]
+        if state.get("action") == "setlink":
+            sku = state["sku"]
+            if not text.startswith(("https://", "http://")):
+                tg_send(chat_id, "Link không hợp lệ. Gõ link bắt đầu bằng https://")
+                return jsonify({"ok": True})
+            update_product_link(sku, text)
+            del ADMIN_STATE[chat_id]
+            tg_send(chat_id, f"✅ Đã lưu link cho *{sku}*:\n{text}")
+            return jsonify({"ok": True})
 
     # Admin commands
     admin_cmds = ("/unmatched", "/set_link", "/admin_help",

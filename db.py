@@ -248,3 +248,33 @@ def get_product_link(sku):
     with conn() as c:
         row = c.execute("SELECT url FROM product_links WHERE sku=?", (sku,)).fetchone()
         return row["url"] if row else None
+
+
+def get_pending_orders(page=0, page_size=5):
+    """Lấy danh sách đơn pending chưa hết hạn."""
+    cutoff = (datetime.utcnow() - timedelta(minutes=PENDING_TIMEOUT_MINUTES)).isoformat()
+    offset = page * page_size
+    with conn() as c:
+        total = c.execute(
+            "SELECT COUNT(*) FROM orders WHERE status='pending' AND created_at >= ?",
+            (cutoff,)
+        ).fetchone()[0]
+        rows = c.execute(
+            "SELECT code, chat_id, sku, amount, created_at FROM orders "
+            "WHERE status='pending' AND created_at >= ? "
+            "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (cutoff, page_size, offset)
+        ).fetchall()
+        return [tuple(r) for r in rows], total
+
+
+def get_recent_orders(days=7):
+    """Lấy đơn gần đây để báo cáo."""
+    since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    with conn() as c:
+        rows = c.execute(
+            "SELECT code, sku, amount, status, created_at, paid_at FROM orders "
+            "WHERE created_at >= ? ORDER BY created_at DESC LIMIT 20",
+            (since,)
+        ).fetchall()
+        return [tuple(r) for r in rows]
