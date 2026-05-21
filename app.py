@@ -128,11 +128,23 @@ def tg_keyboard():
     """Inline keyboard cho menu chính."""
     return {
         "inline_keyboard": [
-            [{"text": "Mua Combo (199.000đ)", "callback_data": "mua_combo"}],
-            [{"text": "Mua Claude (99.000đ)", "callback_data": "mua_claude"}],
-            [{"text": "Mua OpenCode (149.000đ)", "callback_data": "mua_opencode"}],
-            [{"text": "Kiểm tra đơn", "callback_data": "trang_thai"}],
-            [{"text": "Liên hệ tác giả", "callback_data": "lien_he"}],
+            [{"text": "🛒 Combo Full Pack — 199.000đ", "callback_data": "mua_combo"}],
+            [{"text": "🛒 Claude AI — 99.000đ", "callback_data": "mua_claude"}],
+            [{"text": "🛒 OpenCode — 149.000đ", "callback_data": "mua_opencode"}],
+            [{"text": "📋 Kiểm tra đơn", "callback_data": "trang_thai"},
+             {"text": "📞 Liên hệ", "callback_data": "lien_he"}],
+            [{"text": "❓ Hướng dẫn thanh toán", "callback_data": "huong_dan"}],
+        ]
+    }
+
+
+def tg_after_order_keyboard():
+    """Keyboard hiện sau khi khách đặt đơn."""
+    return {
+        "inline_keyboard": [
+            [{"text": "📋 Kiểm tra trạng thái đơn", "callback_data": "trang_thai"}],
+            [{"text": "📞 Liên hệ hỗ trợ", "callback_data": "lien_he"},
+             {"text": "🏠 Menu chính", "callback_data": "ve_menu"}],
         ]
     }
 
@@ -170,21 +182,13 @@ def resolve_drive_link(sku):
 
 def handle_start(chat_id, first_name):
     text = (
-        f"Xin chào *{first_name}*,\n\n"
+        f"Xin chào *{first_name}* 👋\n\n"
         "Tôi là trợ lý bán hàng tự động của anh *Tạ Quang Thuận — AI Thực Chiến*.\n\n"
-        "Bộ sản phẩm hiện có:\n\n"
-        "*Combo Full Pack* — 199.000đ (tiết kiệm 49k)\n"
-        "  └ Trọn bộ Claude + OpenCode, 4 cấp độ cho mỗi bản\n\n"
-        "*Claude AI Thực Chiến* — 99.000đ\n"
-        "  └ Cho dân văn phòng, sinh viên, không cần biết code, dveloper\n\n"
-        "*OpenCode Thực Chiến* — 149.000đ\n"
-        "  └ Cho dân văn phòng, không cần biết code, developer, tech lead\n\n"
-        "Chọn sản phẩm bên dưới hoặc gõ:\n"
-        "/mua\\_combo — mua combo\n"
-        "/mua\\_claude — mua Claude\n"
-        "/mua\\_opencode — mua OpenCode\n"
-        "/trang\\_thai — kiểm tra đơn\n"
-        "/lien\\_he — gặp anh Thuận"
+        "*Sản phẩm:*\n"
+        "• 🎯 Combo Full Pack — *199.000đ* (tiết kiệm 49k)\n"
+        "• 🤖 Claude AI Thực Chiến — *99.000đ*\n"
+        "• 💻 OpenCode Thực Chiến — *149.000đ*\n\n"
+        "Chọn sản phẩm bên dưới để đặt mua 👇"
     )
     tg_send(chat_id, text, reply_markup=tg_keyboard())
 
@@ -225,7 +229,6 @@ def handle_mua(chat_id, sku):
 
     ok = tg_send_photo(chat_id, qr_url, caption)
     if not ok:
-        # Fallback: gửi plain text nếu QR/HTML fail
         tg_send(chat_id,
                 f"Đơn hàng #{code} — {prod['price']:,}đ\n\n"
                 f"Chuyển khoản:\n"
@@ -236,6 +239,7 @@ def handle_mua(chat_id, sku):
                 f"Nội dung: {ck_content}\n\n"
                 f"(QR tạm thời lỗi, vui lòng chuyển thủ công theo thông tin trên)")
 
+    tg_send(chat_id, "👉 Sau khi chuyển khoản, bấm *Kiểm tra đơn* để xem trạng thái:", reply_markup=tg_after_order_keyboard())
     log.info(f"Created order {code} for chat {chat_id} sku={sku}")
 
 
@@ -256,34 +260,33 @@ def handle_trang_thai(chat_id):
     if st == "paid":
         link = drive_link or resolve_drive_link(sku) or "[Đang cập nhật — vui lòng liên hệ anh Thuận]"
         text = (
-            f"*Đơn #{code}* — Đã thanh toán\n"
+            f"*Đơn #{code}* — ✅ Đã thanh toán\n"
             f"Sản phẩm: {prod['name']}\n"
             f"Số tiền: {amount:,}đ\n\n"
-            f"Link tải: {link}\n\n"
-            f"Cảm ơn anh/chị đã mua hàng, Chúc anh chị thực hành tốt và đạt nhiều thành tựu."
+            f"*Link tải:* {link}\n\n"
+            f"Cảm ơn anh/chị đã mua hàng! Chúc anh chị thực hành tốt 🎉"
         )
+        tg_send(chat_id, text)
     elif st == "expired":
         text = (
-            f"*Đơn #{code}* — *Đã hết hạn*\n"
-            f"Sản phẩm: {prod['name']}\n\n"
-            f"Đơn này quá *{PENDING_TIMEOUT_MINUTES} phút* chưa nhận được thanh toán nên đã hết hạn.\n\n"
-            f"Anh/chị Vui lòng tạo đơn mới: /mua\\_combo, /mua\\_claude hoặc /mua\\_opencode "
-            f"rồi chuyển khoản trong vòng {PENDING_TIMEOUT_MINUTES} phút.\n\n"
-            f"Anh/chị Đã chuyển tiền cho đơn cũ? Gõ /lien\\_he để anh Thuận xử lý thủ công ạ."
+            f"*Đơn #{code}* — ⌛ Đã hết hạn\n"
+            f"Sản phẩm: {prod['name']}\n"
+            f"Đơn quá *{PENDING_TIMEOUT_MINUTES} phút* chưa nhận được thanh toán.\n\n"
+            f"Vui lòng tạo đơn mới 👇"
         )
+        tg_send(chat_id, text, reply_markup=tg_keyboard())
     else:  # pending
         text = (
-            f"*Đơn #{code}* — *Chưa thanh toán*\n"
+            f"*Đơn #{code}* — ⏳ Chưa thanh toán\n"
             f"Sản phẩm: {prod['name']}\n"
             f"Số tiền: {amount:,}đ\n\n"
-            f"Hệ thống chưa nhận được chuyển khoản.\n\n"
-            f"Vui lòng kiểm tra:\n"
-            f"1. Số tiền chuyển đúng *{amount:,}đ*\n"
-            f"2. Nội dung CK đúng *MUA {code}*\n"
-            f"3. Đợi thêm 1–2 phút (ngân hàng có thể delay)\n\n"
-            f"Nếu anh/chị đã chuyển đúng, Vui lòng gõ /lien\\_he."
+            f"Kiểm tra lại:\n"
+            f"1️⃣ Số tiền đúng *{amount:,}đ*\n"
+            f"2️⃣ Nội dung đúng *MUA {code}*\n"
+            f"3️⃣ Đợi 1–2 phút (ngân hàng có thể delay)\n\n"
+            f"Đã chuyển rồi? Bấm nút bên dưới để kiểm tra lại 👇"
         )
-    tg_send(chat_id, text)
+        tg_send(chat_id, text, reply_markup=tg_after_order_keyboard())
 
 
 def handle_lien_he(chat_id):
@@ -606,6 +609,19 @@ def telegram_webhook():
             handle_trang_thai(chat_id)
         elif data == "lien_he":
             handle_lien_he(chat_id)
+        elif data == "huong_dan":
+            text = (
+                "*Hướng dẫn thanh toán:*\n\n"
+                "1️⃣ Chọn sản phẩm → bot gửi mã QR + thông tin chuyển khoản\n"
+                "2️⃣ *Cách 1 — Quét QR:* Mở app ngân hàng → Quét mã QR → Xác nhận\n"
+                "3️⃣ *Cách 2 — Chuyển thủ công:* Nhập STK + số tiền + nội dung như hướng dẫn\n"
+                "4️⃣ Sau khi chuyển, bot tự động gửi link tải (hoặc admin xác nhận thủ công)\n\n"
+                "📌 *Lưu ý:* Nội dung chuyển khoản PHẢI đúng mã đơn (VD: MUA TXNXXXX)\n"
+                "⏱ Hệ thống tự động xử lý trong 30 giây sau khi nhận tiền."
+            )
+            tg_send(chat_id, text, reply_markup=tg_keyboard())
+        elif data == "ve_menu":
+            handle_start(chat_id, cq["message"]["chat"].get("first_name", "bạn"))
         return jsonify({"ok": True})
 
     # Regular message
