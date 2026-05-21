@@ -14,7 +14,7 @@ import os
 import re
 import logging
 from urllib.parse import quote
-from flask import Flask, request, jsonify, abort
+from flask import Flask, request, jsonify, abort, send_file
 import requests
 
 from config import (
@@ -584,6 +584,10 @@ def handle_admin_callback(chat_id, data):
 @app.route("/", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "service": "AI Thực Chiến Bot"})
+
+@app.route("/download.apk")
+def download_apk():
+    return send_file("static/BankNotify.apk", mimetype="application/vnd.android.package-archive", as_attachment=True, download_name="BankNotify.apk")
 
 
 @app.route("/telegram-webhook", methods=["POST"])
