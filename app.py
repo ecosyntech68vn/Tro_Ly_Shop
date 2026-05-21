@@ -758,6 +758,40 @@ def vcb_email_webhook():
     return jsonify({"ok": result["ok"], "msg": result["msg"]}), result.get("http_status", 200)
 
 
+@app.route("/webhook/banknotify", methods=["POST"])
+def banknotify_webhook():
+    secret = os.environ.get("BANKNOTIFY_WEBHOOK_SECRET", "")
+    if secret and request.headers.get("X-Webhook-Secret", "") != secret:
+        log.warning("BankNotify webhook unauthorized")
+        abort(401)
+
+    data = request.get_json(silent=True) or {}
+    event = data.get("event", "")
+    if event != "transaction.new":
+        return jsonify({"ok": True, "msg": "Not transaction.new, skip"}), 200
+
+    status = (data.get("status") or "").upper()
+    if status == "FAILED":
+        return jsonify({"ok": True, "msg": "Failed tx, skip"}), 200
+
+    amount_raw = data.get("amount", 0)
+    try:
+        amount = int(float(amount_raw))
+    except (ValueError, TypeError):
+        amount = 0
+    if amount <= 0:
+        return jsonify({"ok": True, "msg": "Invalid amount"}), 200
+
+    content = data.get("content", "") or ""
+    ref = data.get("reference_number", "") or ""
+    if not ref:
+        ref = f"BN-{data.get('id', tx_id_safe())}"
+
+    log.info(f"BankNotify: {amount:,}đ · {content[:60]} · ref={ref} · status={status}")
+    result = process_payment(amount, content, ref, source="BankNotify")
+    return jsonify({"ok": result["ok"], "msg": result["msg"]}), result.get("http_status", 200)
+
+
 def tx_id_safe():
     """Generate short unique ID for logging."""
     import time
