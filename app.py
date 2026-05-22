@@ -37,6 +37,18 @@ log = logging.getLogger(__name__)
 app = Flask(__name__)
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# Startup validation
+if not BOT_TOKEN:
+    log.critical("BOT_TOKEN is EMPTY — bot will NOT send any messages!")
+elif not TG_API.endswith("bot"):
+    log.info(f"TG_API configured: …bot{str(BOT_TOKEN)[:10]}…{str(BOT_TOKEN)[-5:]}")
+if not ADMIN_CHAT_ID:
+    log.warning("ADMIN_CHAT_ID not set — admin notifications disabled")
+if SEPAY_API_KEY:
+    log.info("SEPAY: AUTOMATIC mode — payments are self-service")
+else:
+    log.info("SEPAY: MANUAL mode — admin must /confirm orders")
+
 # VietQR — chuẩn QR thanh toán Napas, mọi app banking VN quét được.
 # BIN code cho từng ngân hàng tại: https://api.vietqr.io/v2/banks
 BANK_BINS = {
@@ -75,6 +87,29 @@ log.info("Database initialized.")
 import time as _time
 
 
+def _tg_call(method, payload):
+    """Gọi Telegram Bot API với retry, trả về response hoặc None."""
+    url = f"{TG_API}/{method}"
+    for attempt in range(3):
+        try:
+            r = requests.post(url, json=payload, timeout=15)
+            if r.ok:
+                return r
+            log.error(f"TG {method} fail (attempt {attempt+1}): {r.status_code} {r.text[:200]}")
+            if r.status_code == 400 and "parse_mode" in payload:
+                payload.pop("parse_mode", None)
+                continue
+            if r.status_code == 401:
+                log.critical(f"TG 401 Unauthorized — BOT_TOKEN may be WRONG! token={str(BOT_TOKEN)[:10]}…")
+            if r.status_code in (429, 502, 503):
+                _time.sleep(1 + attempt)
+                continue
+        except Exception as e:
+            log.exception(f"TG {method} exception (attempt {attempt+1}): {e}")
+            _time.sleep(1 + attempt)
+    return None
+
+
 def tg_send(chat_id, text, reply_markup=None):
     """Gửi tin nhắn tới user qua Telegram Bot API (có retry)."""
     payload = {
@@ -86,22 +121,7 @@ def tg_send(chat_id, text, reply_markup=None):
     if reply_markup:
         payload["reply_markup"] = reply_markup
 
-    for attempt in range(3):
-        try:
-            r = requests.post(f"{TG_API}/sendMessage", json=payload, timeout=10)
-            if r.ok:
-                return
-            log.error(f"Telegram send failed (attempt {attempt+1}): {r.status_code} {r.text}")
-            # Fallback: lỗi parse Markdown (400) thường do link Drive chứa '_' / '*' / '['.
-            if r.status_code == 400 and "parse_mode" in payload:
-                payload.pop("parse_mode", None)
-                continue
-            if r.status_code in (429, 502, 503):
-                _time.sleep(1 + attempt)
-                continue
-        except Exception as e:
-            log.exception(f"Telegram send exception (attempt {attempt+1}): {e}")
-            _time.sleep(1 + attempt)
+    _tg_call("sendMessage", payload)
 
 
 def tg_send_photo(chat_id, photo_url, caption=None):
@@ -113,15 +133,7 @@ def tg_send_photo(chat_id, photo_url, caption=None):
     }
     if caption:
         payload["caption"] = caption
-    try:
-        r = requests.post(f"{TG_API}/sendPhoto", json=payload, timeout=15)
-        if not r.ok:
-            log.error(f"Telegram sendPhoto failed: {r.status_code} {r.text}")
-            return False
-        return True
-    except Exception as e:
-        log.exception(f"Telegram sendPhoto exception: {e}")
-        return False
+    return _tg_call("sendPhoto", payload) is not None
 
 
 def tg_keyboard():
@@ -601,7 +613,6 @@ def telegram_webhook():
         cq = update["callback_query"]
         chat_id = cq["message"]["chat"]["id"]
         data = cq.get("data", "")
-        # Ack callback
         requests.post(f"{TG_API}/answerCallbackQuery",
                       json={"callback_query_id": cq["id"]}, timeout=5)
 

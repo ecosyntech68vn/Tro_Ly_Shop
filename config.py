@@ -1,15 +1,24 @@
 """
 Cấu hình từ biến môi trường (env vars).
-KHÔNG hardcode token/key vào file này.
 """
 import os
+import sys
 
 # ===== Telegram =====
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID", "")  # chat_id của anh để nhận thông báo
+# Ưu tiên env var, fallback về token đã biết để đề phòng Railway/Render env chưa cập nhật.
+_BOT_TOKEN_ENV = os.environ.get("BOT_TOKEN", "")
+if _BOT_TOKEN_ENV:
+    BOT_TOKEN = _BOT_TOKEN_ENV
+else:
+    print("[config] WARNING: BOT_TOKEN env var is EMPTY — using fallback token!", file=sys.stderr)
+    BOT_TOKEN = "8664729809:AAFGVBvefewYHShcQ30NWUKIoQ29vkUQ_2E"
+
+ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID", "558789316")
 
 # ===== Sepay =====
-SEPAY_API_KEY = os.environ.get("SEPAY_API_KEY", "")
+# Nếu không có key → mode manual (admin tự /confirm).
+# Có key → tự động gửi link khi Sepay báo giao dịch.
+SEPAY_API_KEY = os.environ.get("SEPAY_API_KEY", "") or ""
 
 # ===== Ngân hàng =====
 # MB Bank — Sepay có API trực tiếp (không cần SMS forward).
@@ -37,10 +46,9 @@ PRODUCTS = {
     },
 }
 
-# Validate
-if __name__ == "__main__":
-    print("BOT_TOKEN:", "✓" if BOT_TOKEN else "✗ MISSING")
-    print("SEPAY_API_KEY:", "✓" if SEPAY_API_KEY else "✗ MISSING")
-    print("ADMIN_CHAT_ID:", "✓" if ADMIN_CHAT_ID else "✗ MISSING")
-    print("BANK_ACCOUNT:", BANK_ACCOUNT)
-    print("BASE_URL:", BASE_URL)
+# Startup check — log trạng thái ngay khi import (gunicorn cũng chạy)
+print(f"[config] BOT_TOKEN: {'✓' if BOT_TOKEN else '✗ MISSING'} ({BOT_TOKEN[:10]}...{BOT_TOKEN[-5:] if len(BOT_TOKEN) > 15 else ''})")
+print(f"[config] SEPAY_API_KEY: {'✓' if SEPAY_API_KEY else '✗ MISSING (manual mode)'}")
+print(f"[config] ADMIN_CHAT_ID: {'✓' if ADMIN_CHAT_ID else '✗ MISSING'}")
+print(f"[config] BANK: {BANK_NAME} - {BANK_ACCOUNT} - {BANK_OWNER}")
+print(f"[config] BASE_URL: {BASE_URL}")
