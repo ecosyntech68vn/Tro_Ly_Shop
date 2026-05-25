@@ -1,0 +1,24 @@
+# NGÀNH MẸ & BÉ — INSIGHT & CONTENT
+
+## CHÂN DUNG KHÁCH HÀNG
+- **Mẹ bỉm 25-40**: Là nhóm khách chi tiêu nhiều nhất, lo lắng nhất
+- **Nỗi đau**: Sợ sản phẩm độc hại cho con, muốn tốt nhất cho con, thiếu ngủ, stress
+- **Đặc điểm**: Research cực kỹ, đọc review kỹ, hỏi han bạn bè trước mua
+
+## GIỌNG VĂN
+- Đồng cảm: "Mình hiểu cảm giác lo lắng khi chọn đồ cho con..."
+- Chuyên môn: "Theo khuyến cáo của bác sĩ nhi khoa..."
+- Không bán — tư vấn: "Bé [tháng tuổi] nên dùng [sản phẩm] vì..."
+
+## SẢN PHẨM BÁN CHẠY
+- Sữa bột, bỉm/tã, đồ sơ sinh, máy hút sữa, xe đẩy, đồ chơi giáo dục
+
+## CÔNG THỨC CONTENT
+"Mẹ bỉm [số tháng] nhất định phải có [sản phẩm] này"
+"[Số] món đồ cho bé sơ sinh — mua từ tháng thứ mấy?"
+"Review thật: dùng [sản phẩm] [thời gian] — được và chưa được"
+
+## LƯU Ý ĐẶC BIỆT
+- An toàn là trên hết — luôn nhấn mạnh chứng nhận an toàn
+- Mẹ bỉm mua hàng vào ban đêm (khi con ngủ) — đăng bài giờ đó
+- Giá không quan trọng bằng sự an tâm

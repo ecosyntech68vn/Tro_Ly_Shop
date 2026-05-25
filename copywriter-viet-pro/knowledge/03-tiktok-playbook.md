@@ -1,0 +1,71 @@
+# TIKTOK SHOP PLAYBOOK — CHO THỊ TRƯỜNG VIỆT NAM
+
+## 1. ĐẶC ĐIỂM NGƯỜI DÙNG TIKTOK VIỆT NAM
+
+- **Độ tuổi chính**: 18-34 (chiếm 70%)
+- **Thời gian xem trung bình**: 60-120 phút/ngày
+- **Hành vi**: Xem giải trí → tình cờ thấy sản phẩm → mua impulse
+- **TikTok Shop 2026**: Chiếm 41% thị phần TMĐT, tăng trưởng 93% so với năm trước
+
+## 2. CẤU TRÚC VIDEO BÁN HÀNG 15-30 GIÂY
+
+**3 giây đầu — HOOK** (quyết định người dùng có xem tiếp không)
+- Câu hỏi: "Có ai [vấn đề] giống em không?"
+- Gây tò mò: "Đừng mua [sản phẩm] nếu chưa xem video này"
+- Sốc nhẹ: "[Số]% người [làm gì] sai cách này"
+- Khoe: "[Sản phẩm] mới về — nhìn chất lượng này"
+
+**5-20 giây — NỘI DUNG CHÍNH**
+- Giới thiệu sản phẩm (ngắn gọn)
+- Chỉ ra vấn đề nó giải quyết
+- Demo nhanh cách dùng
+
+**20-25 giây — CHỐT**
+- Giá + khuyến mãi (nếu có)
+- "Link trong bio / giỏ hàng"
+
+**25-30 giây — CTA**
+- "Nhanh tay còn số lượng có hạn"
+- "Về [số] cái hết veo — đặt ngay kẻo hết"
+
+## 3. CÁC THỂ LOẠI VIDEO TIKTOK SHOP
+
+| Thể loại | Phù hợp | Ví dụ |
+|----------|---------|-------|
+| Unboxing | Mỹ phẩm, công nghệ | "Mở hộp [sản phẩm] — ôi chất lượng này..." |
+| Review | Mọi ngành | "Dùng [thời gian] — nói thật là..." |
+| Hướng dẫn | Dụng cụ, sản phẩm cần demo | "Cách [làm gì] trong 30 giây" |
+| Trước-sau | Làm đẹp, sức khoẻ | "Đây là trước — đây là sau 2 tuần" |
+| So sánh | Mọi ngành | "Cái này vs cái kia — khác biệt rõ ràng" |
+| Câu chuyện | Thương hiệu | "Tại sao mình bắt đầu làm [sản phẩm]..." |
+
+## 4. LIVESTREAM BÁN HÀNG — KỊCH BẢN 5 PHÚT
+
+**0:00-0:30 — Mở đầu**: "Chào cả nhà, hôm nay em mang tới [sản phẩm] — các chị đợi lâu chưa ạ?"
+
+**0:30-2:00 — Giới thiệu**: Sản phẩm là gì, giải quyết vấn đề gì, tại sao nên mua
+
+**2:00-3:30 — Demo**: Cách dùng, chất liệu, màu sắc — quay gần để thấy rõ
+
+**3:30-4:00 — Ưu đãi**: Giá gốc → giá livestream → quà tặng kèm → số lượng giới hạn
+
+**4:00-5:00 — Chốt**: "Còn [số] suất cuối — ai chốt nhanh em gửi mã"
+
+## 5. 10 HOOK TIKTOK CHO NGƯỜI VIỆT (COPY-PASTE SỬ DỤNG)
+
+1. "Có ai [vấn đề] như em không? — Có cách này..."
+2. "Đừng [mua/làm gì] nếu chưa xem video này"
+3. "[Số]% người Việt đang [làm sai] điều này"
+4. "Anh/chị biết không — [sự thật bất ngờ]"
+5. "POV: bạn là người [mô tả khách hàng]"
+6. "Mình cũng từng [vấn đề] — cho tới khi..."
+7. "[Sản phẩm] giá [giá] — chất lượng [mô tả]"
+8. "Hàng mới về — nhìn nè"
+9. "Cảnh báo: video này sẽ khiến bạn muốn mua ngay"
+10. "Chỉ [thời gian] để có [kết quả]"
+
+## 6. HASHTAG CHIẾN LƯỢC
+
+- 70% hashtag ngành: #mypham #thoitrang #dodunggiadinh
+- 20% hashtag xu hướng: #xuhuong #tiktokshop #banhangonline
+- 10% hashtag thương hiệu: #tenthuonghieu

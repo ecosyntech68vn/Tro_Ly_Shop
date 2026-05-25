@@ -1,0 +1,146 @@
+# HƯỚNG DẪN CÀI ĐẶT — COPYWRITER VIỆT PRO
+
+## TRƯỚC KHI BẮT ĐẦU — ĐỌC KỸ
+
+**Sản phẩm này KHÔNG phải phần mềm AI.** Nó là bộ 20 file hướng dẫn (text) bạn dùng để "dạy" Claude hoặc ChatGPT cách viết content kiểu người Việt.
+
+**Bạn CẦN có sẵn một trong hai tài khoản sau:**
+
+| Nền tảng | Chi phí | Dùng được không? |
+|----------|---------|------------------|
+| Claude Pro | ~$20/tháng | ✅ **Khuyên dùng** — Project + nhiều context |
+| ChatGPT Plus | ~$20/tháng | ✅ Cũng được — Custom GPT, nhưng giới hạn hơn |
+| Claude Free | Miễn phí | ❌ Không có Project, không dùng được |
+| ChatGPT Free | Miễn phí | ❌ Không xài được Custom GPT của người khác |
+
+> Nếu chưa có, bạn cần đăng ký Claude Pro tại claude.ai hoặc ChatGPT Plus trước.
+
+---
+
+## SẢN PHẨM GỒM NHỮNG GÌ?
+
+Sau khi giải nén, bạn sẽ thấy:
+
+```
+copywriter-viet-pro/
+│
+├── instructions.md              ← File QUAN TRỌNG NHẤT (dung lượng ~8000 chữ)
+│                                  Chứa "bộ não" — cách AI suy nghĩ, xưng hô,
+│                                  chọn giọng văn, 10 module tư duy
+│
+├── setup-guide.md               ← File bạn đang đọc
+│
+├── industry-quick-reference.md  ← Bảng tra nhanh: tra cứu giọng văn,
+│                                  trigger bán hàng, module theo ngành
+│
+└── knowledge/                   ← 15 file kiến thức (dùng để upload cho AI)
+    ├── 01-tam-ly-nguoi-mua-viet.md    ← Tâm lý người Việt khi mua hàng
+    ├── 02-facebook-playbook.md        ← Cách viết content Facebook
+    ├── 03-tiktok-playbook.md          ← Cách làm TikTok Shop
+    ├── 04-shopee-playbook.md          ← Cách viết mô tả Shopee
+    ├── 05-email-zalo-playbook.md      ← Cách viết Email & Zalo
+    ├── 06-thoi-trang.md               ← Kiến thức ngành thời trang
+    ├── 07-f-b.md                      ← Kiến thức ngành F&B
+    ├── 08-lam-dep.md                  ← Kiến thức ngành làm đẹp
+    ├── 09-me-be.md                    ← Kiến thức ngành mẹ & bé
+    ├── 10-cong-nghe.md                ← Kiến thức ngành công nghệ
+    ├── 11-noi-that.md                 ← Kiến thức ngành nội thất
+    ├── 12-suc-khoe.md                 ← Kiến thức ngành sức khoẻ
+    ├── 13-giao-duc.md                 ← Kiến thức ngành giáo dục
+    ├── 14-du-lich.md                  ← Kiến thức ngành du lịch
+    └── 15-dich-vu-agency.md           ← Kiến thức ngành dịch vụ
+```
+
+---
+
+## CÁCH DÙNG VỚI CLAUDE (Khuyên dùng)
+
+### Bước 1 — Mở Claude
+
+1. Vào https://claude.ai
+2. Đăng nhập bằng tài khoản **Claude Pro** (bắt buộc)
+
+### Bước 2 — Tạo Project mới
+
+1. Ở menu trái, bấm **Projects** (biểu tượng folder)
+2. Bấm **Create Project**
+3. Đặt tên: `Copywriter Việt Pro`
+4. Bấm **Create**
+
+### Bước 3 — Dán "bộ não" (instructions.md)
+
+1. Trong Project vừa tạo, bấm **Project Settings** (hình bánh răng)
+2. Nhìn xuống mục **System Prompt**
+3. **Mở file `instructions.md`** trên máy bạn → Copy toàn bộ nội dung
+4. **Dán vào ô System Prompt** trong Claude
+5. Bấm **Save**
+
+### Bước 4 — Upload 15 file kiến thức
+
+1. Quay lại màn hình chat của Project
+2. **Kéo thả 5 file đầu tiên** từ thư mục `knowledge/` vào khung chat
+3. Đợi Claude báo đã đọc xong
+4. **Kéo thả tiếp 5 file tiếp theo** → đợi
+5. **Kéo thả 5 file cuối** → đợi
+
+> Tổng cộng 15 file. Claude sẽ tự động đọc và nhớ kiến thức từ các file này.
+
+### Bước 5 — Bắt đầu dùng
+
+Gõ thử một yêu cầu:
+```
+Tôi bán mỹ phẩm, giúp tôi viết bài Facebook bán serum vitamin C
+```
+
+---
+
+## CÁCH DÙNG VỚI CHATGPT (Custom GPT)
+
+### Bước 1 — Mở ChatGPT
+
+1. Vào https://chatgpt.com
+2. Đăng nhập bằng tài khoản **ChatGPT Plus** (bắt buộc)
+
+### Bước 2 — Tạo Custom GPT
+
+1. Bấm vào tên tài khoản (góc trên phải) → **My GPTs**
+2. Bấm **Create a GPT**
+
+### Bước 3 — Dán "bộ não" + upload kiến thức
+
+1. Ở tab **Create**, bấm **Configure**
+2. **Instructions** — Copy toàn bộ nội dung file `instructions.md` vào đây
+3. **Knowledge** — Bấm **Upload files** → upload 15 file từ thư mục `knowledge/`
+4. **Name**: Nhập `Copywriter Việt Pro`
+
+### Bước 4 — Lưu
+
+1. Bấm **Save** ở góc trên phải
+2. Chọn **Only me** (nếu chưa muốn public) hoặc **Everyone** (nếu muốn đăng GPT Store)
+3. Bấm **Confirm**
+
+### Bước 5 — Dùng thử
+
+Quay lại chat → chọn **Copywriter Việt Pro** từ danh sách GPT → bắt đầu gõ yêu cầu.
+
+---
+
+## MẸO SỬ DỤNG HIỆU QUẢ
+
+1. **Càng cụ thể càng tốt**: "Bán áo thun cho nam 25-35 trên Facebook" → kết quả tốt hơn "Viết bài bán áo thun"
+2. **Yêu cầu nhiều format**: "Viết 3 format: Facebook, TikTok, Shopee" — AI sẽ ra 3 nội dung khác nhau
+3. **Yêu cầu giải thích**: Nếu muốn hiểu tại sao → nói "giải thích chiến lược đằng sau"
+4. **Dùng đúng module**: 
+   - Content gần gũi, bình dân → nói "viết kiểu Bà Năm bán hàng"
+   - Content cao cấp, sang trọng → nói "viết kiểu Nghệ nhân làng nghề"
+   - Cần insight khách hàng → nói "phân tích tâm lý khách hàng"
+
+---
+
+## CẬP NHẬT
+
+Bộ kiến thức được cập nhật định kỳ. Theo dõi Telegram @TroLyAIThucChien_bot để nhận thông báo bản cập nhật.
+
+---
+
+**Cần hỗ trợ?** Inbox admin: @ThuanFX

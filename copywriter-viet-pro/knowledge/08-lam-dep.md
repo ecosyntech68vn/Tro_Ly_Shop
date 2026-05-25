@@ -1,0 +1,23 @@
+# NGÀNH LÀM ĐẸP — INSIGHT & CONTENT
+
+## CHÂN DUNG KHÁCH HÀNG
+- **Nữ 18-45**: Là nhóm khách hàng trung thành nhất, sẵn sàng chi nhiều tiền nhất
+- **Quan tâm**: Da đẹp, trang điểm, chống lão hoá, dưỡng trắng
+- **Nỗi đau**: Mụn, sẹo, thâm nám, da nhờn/khô không kiểm soát được
+
+## GIỌNG VĂN
+- Chuyên gia tư vấn: "Da dầu nên dùng [sản phẩm] — vì [thành phần] giúp [tác dụng]"
+- Chia sẻ kinh nghiệm: "Mình từng bị mụn 5 năm — đây là những gì mình đã thử..."
+- Review: "Dùng [thời gian] — da mình thay đổi thế này đây"
+
+## MÙA VỤ
+- Hè (3-6): Chống nắng, trị mụn, xịt khoáng, dưỡng da mỏng nhẹ
+- Thu-đông (9-2): Dưỡng ẩm sâu, trị thâm nám, phục hồi da
+
+## 3 LOẠI CONTENT HIỆU QUẢ NHẤT
+1. **Review có ảnh thật**: Trước-sau rõ ràng → tạo niềm tin
+2. **Hướng dẫn routine**: "Quy trình chăm sóc da sáng/tối" → giáo dục khách hàng
+3. **Giải đáp vấn đề da**: "Bị mụn đầu đen phải làm sao?" → SEO + tương tác
+
+## TỪ KHOÁ SEO
+Kem chống nắng, serum vitamin C, sữa rửa mặt cho da mụn, dưỡng ẩm da khô, trị nám...

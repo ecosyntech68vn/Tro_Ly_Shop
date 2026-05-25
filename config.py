@@ -44,6 +44,11 @@ PRODUCTS = {
         "name": "OpenCode Thực Chiến (4 cấp)",
         "price": 149000,
     },
+    "mua_copywriter": {
+        "name": "Copywriter Việt Pro — Bộ 20 file: instructions + 15 knowledge base (cần Claude Pro hoặc ChatGPT Plus để dùng)",
+        "price": 449000,
+    },
+    # Agent subscription plans (handled via agent_db.AGENT_PLANS)
 }
 
 # Startup check — log trạng thái ngay khi import (gunicorn cũng chạy)
@@ -52,3 +57,9 @@ print(f"[config] SEPAY_API_KEY: {'✓' if SEPAY_API_KEY else '✗ MISSING (manua
 print(f"[config] ADMIN_CHAT_ID: {'✓' if ADMIN_CHAT_ID else '✗ MISSING'}")
 print(f"[config] BANK: {BANK_NAME} - {BANK_ACCOUNT} - {BANK_OWNER}")
 print(f"[config] BASE_URL: {BASE_URL}")
+
+# AI Agent — API keys (check tồn tại, không log giá trị)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "") or ""
+CLAUDE_API_KEY = os.environ.get("CLAUDE_API_KEY", "") or ""
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "") or ""
+print(f"[config] GEMINI_API_KEY: {'✓' if GEMINI_API_KEY else '✗'} | CLAUDE_API_KEY: {'✓' if CLAUDE_API_KEY else '✗'} | OPENAI_API_KEY: {'✓' if OPENAI_API_KEY else '✗'}")

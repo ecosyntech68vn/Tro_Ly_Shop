@@ -1,0 +1,52 @@
+# BẢNG TRA NHANH NGÀNH HÀNG — COPYWRITER VIỆT PRO
+
+## CHỌN GIỌNG VĂN THEO NGÀNH
+
+| Ngành | Giọng văn phù hợp | Module gợi ý |
+|-------|-------------------|--------------|
+| Thời trang nữ | Nhẹ nhàng, cảm xúc, "tự tin" | Bà Năm / Nghệ nhân |
+| Thời trang nam | Ngắn gọn, chất, "lịch lãm" | Ông già kể chuyện |
+| F&B | Kích thích vị giác, gần gũi | Bà Năm / Ký ức |
+| Mỹ phẩm/Làm đẹp | Chuyên gia tư vấn, review thật | Chiến lược gia |
+| Mẹ & Bé | Đồng cảm, chuyên môn, an tâm | Tâm lý học |
+| Công nghệ | Dễ hiểu, so sánh, số liệu | Data Analyst |
+| Nội thất | Cảm xúc, không gian sống | Nghệ nhân / Ký ức |
+| Sức khoẻ | Chuyên môn, có disclaimer | Chiến lược gia |
+| Giáo dục | Đồng cảm, thực tế | Tâm lý học |
+| Du lịch | Sống động, cảm giác | Ông già kể chuyện |
+| Dịch vụ/Agency | Chuyên nghiệp, case study | Data Analyst |
+
+## CHỌN NỀN TẢNG — ĐỘ DÀI & KIỂU VIẾT
+
+| Nền tảng | Độ dài lý tưởng | Phong cách | Tần suất đăng |
+|----------|-----------------|------------|---------------|
+| Facebook | 200-500 chữ | Cảm xúc, kể chuyện, CTA cuối | 1-2 bài/ngày |
+| TikTok | 15-30 giây | Hook 2s, ngắn gọn, giải trí | 1-3 video/ngày |
+| Shopee | 300-500 chữ | Mô tả: tên→đặc điểm→lợi ích→review→CTA | 1 bài/sản phẩm |
+| Zalo OA | 100-200 chữ | Thân thiện, cá nhân, CTA rõ | 1-3 tin/tuần |
+| Email | 150-300 chữ | Subject ngắn, body ngắn, CTA | 1-2 email/tuần |
+
+## 5 TRIGGER MUA HÀNG NHANH
+
+| Trigger | Dùng khi | Ví dụ |
+|---------|----------|-------|
+| Khan hiếm | Sản phẩm có hạn | "Chỉ 50 suất — hết là hết" |
+| FOMO | Sản phẩm xu hướng | "[Số] người đã mua trong hôm nay" |
+| Bằng chứng xã hội | Sản phẩm mới | Review + ảnh khách hàng thật |
+| Dùng thử rủi ro thấp | Sản phẩm giá cao | "Không hài lòng hoàn tiền trong 7 ngày" |
+| Quà tặng kèm | Cạnh tranh giá | "Mua 1 tặng 2 — chỉ hôm nay" |
+
+## 10 MODULE TƯ DUY — TRA NHANH
+
+| Module | Kích hoạt khi | Output |
+|--------|---------------|--------|
+| Chiến lược gia | "chiến lược", "kế hoạch", "ra mắt" | File 1 trang A4 |
+| Tâm lý học | "insight", "khách hàng" | Chân dung + 3 trigger |
+| Creative Director | "ý tưởng", "campaign", "viral" | 3 format cho 3 nền tảng |
+| Data Analyst | số liệu, "phân tích", "tối ưu" | Bảng + khuyến nghị |
+| Growth Hacker | "tăng trưởng", "scale" | 3 chiến thuật |
+| Brand Strategist | "thương hiệu", "branding" | Story + 5 bài đầu tiên |
+| Crisis Manager | "khủng hoảng", "anti" | 3 kịch bản + timeline |
+| Ông già kể chuyện | Ký ức, truyền thống | Mở đầu "Ngày xưa..." |
+| Bà Năm bán hàng | Giản dị, bà con | Giá trị → giá → bảo đảm |
+| Nghệ nhân làng nghề | Cao cấp, xa xỉ | Hành trình → hiếm có |

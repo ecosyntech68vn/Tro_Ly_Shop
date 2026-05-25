@@ -1,0 +1,63 @@
+# FACEBOOK MARKETING PLAYBOOK — CHO NGƯỜI VIỆT
+
+## 1. ĐẶC ĐIỂM NGƯỜI DÙNG FACEBOOK VIỆT NAM
+
+- **Giờ vàng**: 11:30-13:30 (giờ trưa), 19:00-22:00 (giờ tối), 06:00-08:00 (sáng sớm)
+- **Ngày vàng**: Thứ 7, Chủ nhật, ngày lễ
+- **Hành vi**: Lướt nhiều hơn đọc, like nhiều hơn comment, comment nhiều hơn share
+
+## 2. CÁC DẠNG BÀI VIẾT FACEBOOK
+
+### Dạng 1 — Bài cảm xúc
+**Mục đích**: Tương tác, lan toả
+**Độ dài**: 200-400 chữ
+**Cấu trúc**: Mở đầu bằng 1 câu chạm → Kể chuyện → Kết nối với sản phẩm/nhãn hàng → CTA
+**Ví dụ mở đầu**: "Hồi đó tôi cũng từng..."
+
+### Dạng 2 — Bài giáo dục
+**Mục đích**: Xây dựng uy tín
+**Độ dài**: 500-800 chữ
+**Cấu trúc**: Vấn đề → Nguyên nhân → Giải pháp → Kêu gọi hành động
+**Ví dụ mở đầu**: "Có 3 sai lầm khiến [chủ đề] không hiệu quả..."
+
+### Dạng 3 — Bài chốt sale
+**Mục đích**: Bán hàng trực tiếp
+**Độ dài**: 100-200 chữ
+**Cấu trúc**: Giới thiệu sản phẩm → Lợi ích chính → Bằng chứng → Giá → CTA
+**Ví dụ mở đầu**: "[Tên sản phẩm] — [lợi ích chính]. Anh/chị quan tâm inbox em nhé."
+
+### Dạng 4 — Bài review/chứng thực
+**Mục đích**: Tạo niềm tin — Công thức: "Thấy người ta dùng → Mua theo"
+**Cấu trúc**: Ảnh khách hàng + Lời khen + Số liệu (nếu có) + Offer
+
+### Dạng 5 — Bài group (bán ngầm)
+**Mục đích**: Bán hàng trong group mà không bị ban
+**Cấu trúc**: 70% chia sẻ giá trị + 30% giới thiệu sản phẩm
+**Ví dụ**: "Em mới thử cách này thấy hiệu quả, share cho anh chị tham khảo..."
+
+## 3. NHỮNG CÂU "VÀNG" TRÊN FACEBOOK VIỆT NAM
+
+- "Lướt tới đây là duyên rồi..."
+- "Có ai giống em không..."
+- "Không biết anh chị thấy sao chứ em thấy..."
+- "Em không nói quá — nhưng đây là..."
+- "Chia sẻ thật lòng — không bán hàng đâu ạ"
+
+## 4. LƯU Ý KHI CHẠY QUẢNG CÁO FACEBOOK CHO THỊ TRƯỜNG VIỆT
+
+- **Ảnh**: Ảnh thật (không stock) — tỷ lệ click cao hơn 40%
+- **Tiêu đề**: Tối đa 40 ký tự, có số hoặc câu hỏi
+- **Nội dung**: Có emoji vừa phải (2-3 cái), xuống dòng ngắn
+- **CTA**: "Inbox ngay" hiệu quả hơn "Mua ngay" cho sản phẩm giá cao
+- **Targeting**: Độ tuổi + sở thích + hành vi — không chỉ dựa vào nhân khẩu học
+
+## 5. MA TRẬN NỘI DUNG FACEBOOK HÀNG TUẦN
+
+| Thứ | Dạng bài | Mục đích |
+|-----|----------|----------|
+| 2 | Giáo dục | Mở đầu tuần — cung cấp giá trị |
+| 3 | Cảm xúc | Kết nối, kể chuyện |
+| 4 | Review/chứng thực | Bằng chứng xã hội |
+| 5 | Chốt sale | Flash sale cuối tuần |
+| 7 | Giáo dục ngắn | Cuối tuần đọc nhẹ |
+| CN | Cảm xúc/cộng đồng | Kết nối sâu hơn |

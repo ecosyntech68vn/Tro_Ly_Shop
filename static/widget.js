@@ -1,0 +1,179 @@
+(function () {
+  var TOKEN = null;
+  var SESSION = 's_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  var API = '/api/chat';
+  var msgs = [];
+
+  var scripts = document.getElementsByTagName('script');
+  for (var i = 0; i < scripts.length; i++) {
+    var s = scripts[i];
+    if (s.src && s.src.indexOf('widget.js') !== -1) {
+      TOKEN = s.getAttribute('data-token');
+      break;
+    }
+  }
+
+  if (!TOKEN) return;
+
+  var styles = document.createElement('style');
+  styles.textContent =
+    '#ac-widget-btn{' +
+      'position:fixed;bottom:24px;right:24px;z-index:999999;' +
+      'width:56px;height:56px;border-radius:50%;' +
+      'background:#0088cc;color:#fff;border:none;' +
+      'font-size:26px;cursor:pointer;' +
+      'box-shadow:0 4px 16px rgba(0,0,0,.25);' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'transition:transform .2s;' +
+    '}' +
+    '#ac-widget-btn:hover{transform:scale(1.08)}' +
+    '#ac-widget-box{' +
+      'position:fixed;bottom:92px;right:24px;z-index:999999;' +
+      'width:360px;max-width:calc(100vw - 48px);' +
+      'height:520px;max-height:calc(100vh - 140px);' +
+      'background:#fff;border-radius:16px;' +
+      'box-shadow:0 8px 32px rgba(0,0,0,.18);' +
+      'display:none;flex-direction:column;' +
+      'overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif;' +
+    '}' +
+    '#ac-widget-header{' +
+      'background:#0088cc;color:#fff;padding:14px 18px;' +
+      'font-size:15px;font-weight:600;display:flex;' +
+      'justify-content:space-between;align-items:center;' +
+    '}' +
+    '#ac-widget-close{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;}' +
+    '#ac-widget-body{' +
+      'flex:1;overflow-y:auto;padding:12px 16px;' +
+      'background:#f5f6f8;' +
+    '}' +
+    '#ac-widget-foot{display:flex;border-top:1px solid #e8e8e8;padding:8px;}' +
+    '#ac-widget-input{' +
+      'flex:1;border:1px solid #ddd;border-radius:20px;' +
+      'padding:8px 14px;font-size:14px;outline:none;' +
+    '}' +
+    '#ac-widget-input:focus{border-color:#0088cc}' +
+    '#ac-widget-send{' +
+      'margin-left:8px;border:none;border-radius:50%;' +
+      'width:38px;height:38px;background:#0088cc;color:#fff;' +
+      'font-size:18px;cursor:pointer;display:flex;' +
+      'align-items:center;justify-content:center;' +
+    '}' +
+    '.ac-msg{margin-bottom:10px;max-width:80%;}' +
+    '.ac-msg-user{margin-left:auto;}' +
+    '.ac-msg-bot{margin-right:auto;}' +
+    '.ac-msg-text{' +
+      'padding:8px 14px;border-radius:18px;font-size:14px;' +
+      'line-height:1.45;word-wrap:break-word;' +
+    '}' +
+    '.ac-msg-user .ac-msg-text{background:#0088cc;color:#fff;border-radius:18px 18px 4px 18px;}' +
+    '.ac-msg-bot .ac-msg-text{background:#fff;color:#333;border-radius:4px 18px 18px 18px;box-shadow:0 1px 3px rgba(0,0,0,.08);}' +
+    '.ac-typing{color:#999;font-size:13px;padding:4px 0 8px 14px;}' +
+    '#ac-widget-powered{' +
+      'text-align:center;padding:4px 0;font-size:11px;color:#bbb;' +
+      'border-top:1px solid #f0f0f0;' +
+    '}';
+
+  document.head.appendChild(styles);
+
+  var btn = document.createElement('button');
+  btn.id = 'ac-widget-btn';
+  btn.innerHTML = '&#128172;';
+  btn.title = 'Chat với shop';
+  document.body.appendChild(btn);
+
+  var box = document.createElement('div');
+  box.id = 'ac-widget-box';
+  box.innerHTML =
+    '<div id="ac-widget-header">' +
+      '<span>Chat hỗ trợ</span>' +
+      '<button id="ac-widget-close">&times;</button>' +
+    '</div>' +
+    '<div id="ac-widget-body">' +
+      '<div class="ac-msg ac-msg-bot"><div class="ac-msg-text">Chào bạn! Em có thể giúp gì cho bạn ạ?</div></div>' +
+    '</div>' +
+    '<div id="ac-widget-foot">' +
+      '<input id="ac-widget-input" type="text" placeholder="Nhập tin nhắn..." />' +
+      '<button id="ac-widget-send">&#10148;</button>' +
+    '</div>' +
+    '<div id="ac-widget-powered">Trợ lý AI</div>';
+  document.body.appendChild(box);
+
+  var bodyEl = document.getElementById('ac-widget-body');
+  var inputEl = document.getElementById('ac-widget-input');
+  var sendEl = document.getElementById('ac-widget-send');
+  var closeEl = document.getElementById('ac-widget-close');
+  var shown = false;
+
+  function scrollBottom() {
+    bodyEl.scrollTop = bodyEl.scrollHeight;
+  }
+
+  function addMsg(text, role) {
+    var div = document.createElement('div');
+    div.className = 'ac-msg ac-msg-' + role;
+    div.innerHTML = '<div class="ac-msg-text">' + text.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>') + '</div>';
+    bodyEl.appendChild(div);
+    scrollBottom();
+  }
+
+  function showTyping() {
+    var div = document.createElement('div');
+    div.className = 'ac-typing';
+    div.id = 'ac-typing-indicator';
+    div.textContent = 'đang trả lời...';
+    bodyEl.appendChild(div);
+    scrollBottom();
+  }
+
+  function hideTyping() {
+    var el = document.getElementById('ac-typing-indicator');
+    if (el) el.remove();
+  }
+
+  function send() {
+    var text = inputEl.value.trim();
+    if (!text) return;
+    inputEl.value = '';
+    addMsg(text, 'user');
+    showTyping();
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', API, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        hideTyping();
+        try {
+          var data = JSON.parse(xhr.responseText);
+          if (data.reply) {
+            addMsg(data.reply, 'bot');
+          } else {
+            addMsg('Xin lỗi, em đang gặp trục trặc. Anh/chị thử lại sau nhé!', 'bot');
+          }
+        } catch (e) {
+          addMsg('Xin lỗi, em đang gặp trục trặc. Anh/chị thử lại sau nhé!', 'bot');
+        }
+      }
+    };
+    xhr.send(JSON.stringify({ token: TOKEN, message: text, session: SESSION }));
+  }
+
+  btn.onclick = function () {
+    shown = !shown;
+    box.style.display = shown ? 'flex' : 'none';
+    if (shown) {
+      inputEl.focus();
+      scrollBottom();
+    }
+  };
+
+  closeEl.onclick = function () {
+    shown = false;
+    box.style.display = 'none';
+  };
+
+  sendEl.onclick = send;
+  inputEl.onkeydown = function (e) {
+    if (e.key === 'Enter') send();
+  };
+})();

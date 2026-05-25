@@ -1,0 +1,57 @@
+# TÂM LÝ NGƯỜI MUA VIỆT NAM — CẨM NANG CHO NGƯỜI LÀM MARKETING
+
+## 1. THẾ HỆ & ĐẶC ĐIỂM
+
+### Gen Z (1997-2012)
+- **Đặc điểm**: Sợ bỏ lỡ (FOMO), muốn khẳng định cá tính, research kỹ trước mua
+- **Nỗi đau**: "Tiền ít nhưng muốn nhiều", "sợ mua sai bị bạn bè chê"
+- **Cách tiếp cận**: Content ngắn, thật, hài hước. TikTok là chính. Không dạy đời.
+- **Trigger**: FOMO ("sắp hết"), cá nhân hoá ("dành riêng cho bạn"), bằng chứng xã hội ("bao người đã mua")
+
+### Millennials (1981-1996)
+- **Đặc điểm**: So sánh giá, quan tâm chất lượng, đọc review kỹ
+- **Nỗi đau**: "Cần mà không dám mua vì giá", "sợ tiền mất tật mang"
+- **Cách tiếp cận**: Content dài hơn, giải thích lý do tại sao đáng giá. Facebook là kênh chính.
+- **Trigger**: Tiết kiệm ("tiết kiệm X%"), an tâm ("bảo hành X ngày"), giá trị ("dùng được lâu")
+
+## 2. TÂM LÝ ĐẶC THÙ NGƯỜI VIỆT
+
+### Tâm lý "hên xui"
+- Người Việt thích thử, dễ mua theo cảm xúc
+- **Áp dụng**: Offer dùng thử, "không hài lòng hoàn tiền" — giảm rủi ro tâm lý
+
+### Tâm lý "đám đông"
+- "Ai cũng dùng", "bán chạy", "hàng nghìn người đã mua" — có sức nặng
+- **Áp dụng**: Review, số lượng bán, chứng thực từ người thật
+
+### Tâm lý "tiết kiệm"
+- "Mua 1 được 2" bán chạy hơn "giảm 50%"
+- "Giá gốc — giá sale" vẫn hiệu quả
+- **Áp dụng**: Bundle deal, quà tặng kèm, free ship
+
+### Tâm lý "sĩ diện"
+- Mua hàng hiệu, quà tặng, quà biểu — sẵn sàng trả giá cao
+- **Áp dụng**: Gói quà đẹp, thương hiệu có câu chuyện
+
+## 3. 3 TRIGGER MUA HÀNG MẠNH NHẤT
+
+### Trigger #1 — CÓ 1 KHÔNG 2
+**Cơ chế**: Khan hiếm + độc quyền
+**Cách dùng**: "Phiên bản giới hạn", "chỉ 50 suất", "độc quyền tại..."
+**Hiệu quả**: Cao nhất với sản phẩm tầm trung-cao
+
+### Trigger #2 — NGƯỜI THẬT VIỆC THẬT
+**Cơ chế**: Bằng chứng xã hội + giảm rủi ro
+**Cách dùng**: Review khách hàng, unboxing video, trước-sau
+**Hiệu quả**: Cao nhất với sản phẩm mới
+
+### Trigger #3 — SỢ MẤT
+**Cơ chế**: Thời gian có hạn + cơ hội có hạn
+**Cách dùng**: "Kết thúc hôm nay", "tăng giá sắp tới", "hết mã giảm giá"
+**Hiệu quả**: Cao nhất với quyết định mua nhanh
+
+## 4. HÀNH TRÌNH MUA CỦA NGƯỜI VIỆT (AISAS)
+
+**Attention** (Chú ý) → **Interest** (Quan tâm) → **Search** (Tìm kiếm) → **Action** (Mua) → **Share** (Chia sẻ)
+
+**Khác biệt Việt Nam**: Giai đoạn SEARCH rất quan trọng. Người Việt research nhiều hơn các nước khác trước khi mua — đặc biệt với sản phẩm trên 500k. Cần có nội dung cho giai đoạn này: review, so sánh, hướng dẫn chọn mua.

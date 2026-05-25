@@ -1,0 +1,52 @@
+# EMAIL & ZALO MARKETING PLAYBOOK — CHO NGƯỜI VIỆT
+
+## 1. ZALO OA (OFFICIAL ACCOUNT)
+
+**Zalo là kênh quan trọng nhất cho doanh nghiệp Việt** — 75% người Việt dùng Zalo hàng ngày.
+
+### Các dạng tin Zalo OA
+
+**Dạng 1 — Tin nhắn chăm sóc**
+- Gửi vào: Sau khi khách mua 1-2 ngày
+- Nội dung: "Cảm ơn + hỏi thăm + hướng dẫn + offer lần sau"
+- Ví dụ: "Em cảm ơn anh/chị đã mua [sản phẩm] ạ. Anh/chị nhận được hàng chưa có gì thắc mắc em hỗ trợ nhé. À, shop có mã giảm [giá trị] cho lần sau..."
+
+**Dạng 2 — Tin nhắn khuyến mãi**
+- Tần suất: 1-2 lần/tuần (không quá nhiều — dễ bị chặn)
+- Cấu trúc: Tiêu đề hấp dẫn → Ưu đãi → Thời gian → CTA
+
+**Dạng 3 — Tin nhắn thông báo**
+- Đơn hàng, giao hàng, bảo hành
+
+## 2. EMAIL MARKETING
+
+**Người Việt không thích đọc email dài** — tối đa 3-5 đoạn, mỗi đoạn 2-3 câu.
+
+### Cấu trúc email
+
+**Subject line**: Dưới 50 ký tự, gây tò mò hoặc nêu lợi ích rõ ràng
+- "[Tên khách], em có cái này cho anh/chị nè"
+- "Giảm [số]% — kết thúc [ngày]"
+- "Bí quyết [chủ đề] trong 5 phút"
+
+**Body**:
+- Dòng 1: Chào hỏi cá nhân hoá
+- Dòng 2-3: Vấn đề/lợi ích
+- Dòng 4-5: Giải pháp + Offer
+- Dòng 6: CTA rõ ràng
+
+**Signature**: Tên người thật (không phải tên công ty)
+
+## 3. AUTO-FUNNEL CHĂM SÓC KHÁCH
+
+**Ngày 1**: Cảm ơn + hướng dẫn sử dụng
+**Ngày 3**: Hỏi thăm đã dùng chưa
+**Ngày 7**: Mẹo hay với sản phẩm
+**Ngày 14**: Offer mua lại (giảm giá cho khách cũ)
+**Ngày 30**: Khảo sát hài lòng + offer giới thiệu bạn bè
+
+## 4. NHỮNG CÂU KHÔNG NÊN NÓI TRÊN ZALO/EMAIL
+
+- "Quý khách thân mến" → quá khách sáo, không tự nhiên
+- "Chúng tôi trân trọng thông báo" → văn thư, không phải người thật
+- Dài quá 300 chữ trên Zalo → không ai đọc hết

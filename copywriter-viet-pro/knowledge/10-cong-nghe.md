@@ -1,0 +1,21 @@
+# NGÀNH CÔNG NGHỆ & ĐIỆN TỬ — INSIGHT & CONTENT
+
+## CHÂN DUNG KHÁCH HÀNG
+- **Nam 20-45**: Quan tâm thông số kỹ thuật, so sánh trước mua
+- **Nữ 25-40**: Quan tâm công năng, dễ sử dụng, thiết kế
+- **Doanh nghiệp nhỏ**: Máy tính, linh kiện, thiết bị văn phòng
+
+## GIỌNG VĂN
+- Nam: Giải thích thông số dễ hiểu, so sánh, "con số biết nói"
+- Nữ: Tập trung vào lợi ích thực tế, không cần biết thông số chi tiết
+- Công thức: Thông số → Giải thích bằng đời thường → Lợi ích
+
+## VÍ DỤ CHUYỂN ĐỔI NGÔN NGỮ KỸ THUẬT
+- "RAM 8GB" → "Mở được 10 tab Chrome + 1 file Excel + 1 Zoom call — không lag"
+- "Chip Snapdragon 8 Gen 2" → "Chơi game nặng nhất cũng mượt"
+- "Pin 5000mAh" → "Sạc 1 lần xài 2 ngày"
+
+## CÔNG THỨC CONTENT
+"[Sản phẩm] — có đáng tiền không? Review sau [thời gian] dùng thử"
+"So sánh [sản phẩm A] vs [sản phẩm B] — nên mua cái nào?"
+"Có [số]tr — nên mua [sản phẩm] nào?"

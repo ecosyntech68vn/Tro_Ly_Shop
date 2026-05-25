@@ -8,6 +8,7 @@ import string
 import random
 from datetime import datetime, timedelta
 from contextlib import contextmanager
+from importlib import import_module
 
 DB_PATH = os.environ.get("DB_PATH", "bot.db")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -122,6 +123,8 @@ def _exec(ddl_sqlite, ddl_pg=None):
 
 
 def init_db():
+    from agent_db import init_agent_tables
+    init_agent_tables()
     _exec(
         """
         CREATE TABLE IF NOT EXISTS orders (
