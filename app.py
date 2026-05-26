@@ -263,6 +263,7 @@ log.info("Database initialized.")
 # TELEGRAM HELPERS
 # ============================================================
 
+import signal
 import time as _time
 
 
@@ -2001,9 +2002,113 @@ def _cors(response):
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
     return response
 
+# ========== P3 STARTUP ==========
+
+STARTUP_TIME = _time.time()
+
+def validate_startup():
+    """Check all required resources are available."""
+    ok = True
+    msgs = []
+    # DB
+    try:
+        from db import _db
+        d = _db()
+        d.execute("SELECT 1")
+        d.close()
+        msgs.append("DB:OK")
+    except Exception as e:
+        msgs.append(f"DB:FAIL({e})")
+        ok = False
+    # AI keys
+    if GEMINI_API_KEY:
+        msgs.append("Gemini:OK")
+    else:
+        msgs.append("Gemini:MISSING")
+    if CLAUDE_API_KEY:
+        msgs.append("Claude:OK")
+    else:
+        msgs.append("Claude:MISSING")
+    if OPENAI_API_KEY:
+        msgs.append("GPT4:OK")
+    else:
+        msgs.append("GPT4:MISSING")
+    # Directories
+    for d in ("static", "templates"):
+        if os.path.isdir(d):
+            msgs.append(f"{d}:OK")
+        else:
+            msgs.append(f"{d}:MISSING")
+            ok = False
+    log.info(f"Startup validation: {'ALL OK' if ok else 'ISSUES'} — {' | '.join(msgs)}")
+    return ok
+
+
+# P3.2 — Graceful shutdown
+def _shutdown_handler(signum, frame):
+    log.info(f"Received signal {signum}, shutting down gracefully...")
+    AI_EXECUTOR.shutdown(wait=True)
+    log.info("Executor shut down. Bye.")
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, _shutdown_handler)
+signal.signal(signal.SIGINT, _shutdown_handler)
+
+
+# P3.4 — Request logging middleware
+@app.before_request
+def _before_request():
+    request._start_time = _time.time()
+
+@app.after_request
+def _after_request(response):
+    if request.path.startswith("/static/"):
+        return response
+    dt = _time.time() - getattr(request, "_start_time", _time.time())
+    log.info(f"{request.method} {request.path} -> {response.status_code} ({dt*1000:.0f}ms)")
+    # P3.5 Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
+
+
+# P3.5 — Error handlers
+@app.errorhandler(404)
+def _not_found(e):
+    return jsonify({"error": "not_found"}), 404
+
+@app.errorhandler(500)
+def _server_error(e):
+    log.exception("Internal server error")
+    return jsonify({"error": "internal_error"}), 500
+
+
+# P3.1 — Enhanced health check
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "service": "AI Thực Chiến Bot"})
+    db_ok = False
+    try:
+        from db import _db
+        d = _db()
+        d.execute("SELECT 1")
+        d.close()
+        db_ok = True
+    except Exception:
+        pass
+    return jsonify({
+        "status": "ok" if db_ok else "degraded",
+        "service": "AI Thực Chiến Bot",
+        "uptime": f"{(_time.time() - STARTUP_TIME):.0f}s",
+        "db": "connected" if db_ok else "error",
+        "ai_models": {
+            "gemini": bool(GEMINI_API_KEY),
+            "claude": bool(CLAUDE_API_KEY),
+            "gpt4": bool(OPENAI_API_KEY),
+        },
+        "sepay": "manual" if not SEPAY_API_KEY else "auto",
+        "version": "3.0",
+    })
 
 @app.route("/download.apk")
 def download_apk():
