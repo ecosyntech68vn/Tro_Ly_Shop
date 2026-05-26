@@ -17,6 +17,7 @@ import time
 import random
 import logging
 import threading
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 from flask import Flask, request, jsonify, abort, send_file, session, redirect, url_for, render_template
@@ -56,6 +57,7 @@ log = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+app.permanent_session_lifetime = timedelta(hours=4)
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 BOT_USERNAME = "TroLyAIThucChien_bot"
 BOT_ID = None  # resolved at runtime from first my_chat_member
@@ -747,7 +749,6 @@ def call_ai_model(model, system_prompt, user_message):
     return "⚠️ Model không hợp lệ."
 
 
-from datetime import datetime
 
 
 # ============================================================
@@ -1651,6 +1652,14 @@ def dashboard_catalog_delete():
             c.execute("DELETE FROM agent_products WHERE id=? AND owner_chat_id=?", (pid, cid))
     return redirect(url_for('dashboard_catalog'))
 
+
+@app.after_request
+def _cors(response):
+    if request.path in ('/api/chat', '/api/chat/'):
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    return response
 
 @app.route("/", methods=["GET"])
 def health():

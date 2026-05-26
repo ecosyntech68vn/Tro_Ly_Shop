@@ -229,11 +229,16 @@ def import_products_from_csv(owner_chat_id, csv_text):
 
 
 def search_products(owner_chat_id, query, limit=5):
-    """Keyword search across product name, description, sku, category."""
+    """Keyword search across product name, description, sku, category.
+    Python-side matching (handles Vietnamese Unicode correctly).
+    Max 500 candidates loaded per shop to bound memory."""
     keywords = query.lower().split()
+    if not keywords:
+        return []
     with conn() as c:
         rows = c.execute(
-            "SELECT * FROM agent_products WHERE owner_chat_id=?", (owner_chat_id,)
+            "SELECT * FROM agent_products WHERE owner_chat_id=? LIMIT 500",
+            (owner_chat_id,)
         ).fetchall()
     scored = []
     for row in rows:
@@ -275,14 +280,18 @@ def save_correction(owner_chat_id, question, answer):
 
 def find_correction_match(owner_chat_id, query, threshold=0.45):
     """Find a saved correction matching the query by keyword overlap.
+    SQL pre-filter (any keyword match) + Python scoring on reduced set.
     Returns (question, answer) or None."""
     query_kw = set(_nd(query).split())
     if not query_kw:
         return None
+    # SQL: only load rows that share at least one keyword
+    clauses = " OR ".join(["keywords LIKE ?" for _ in query_kw])
+    params = [owner_chat_id] + [f"%{kw}%" for kw in query_kw]
     with conn() as c:
         rows = c.execute(
-            "SELECT question, answer, keywords FROM agent_learned WHERE owner_chat_id=?",
-            (owner_chat_id,)
+            f"SELECT question, answer, keywords FROM agent_learned WHERE owner_chat_id=? AND ({clauses}) LIMIT 200",
+            params
         ).fetchall()
     best = None
     best_score = 0
@@ -595,6 +604,15 @@ def init_agent_tables():
             _exec(f"ALTER TABLE {tbl_col}", pg_sql)
         except Exception:
             pass  # column already exists
+
+    # Index: composite index for dashboard ORDER BY created_at DESC queries
+    try:
+        _exec(
+            "CREATE INDEX IF NOT EXISTS idx_agent_chats_created ON agent_chats(owner_chat_id, created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_agent_chats_created ON agent_chats(owner_chat_id, created_at)"
+        )
+    except Exception:
+        pass
 
     log.info("Agent tables initialized.")
 
