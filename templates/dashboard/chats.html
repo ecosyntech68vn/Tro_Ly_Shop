@@ -3,13 +3,12 @@
 <div class="header"><h1>💬 Hội thoại</h1></div>
 
 {% if chats %}
-<table><tr><th>Khách</th><th>Nhóm</th><th>Bạn</th><th>Bot</th><th>Lúc</th></tr>
+<table><tr><th>Khách</th><th>Vai trò</th><th>Nội dung</th><th>Lúc</th></tr>
 {% for c in chats %}
 <tr>
   <td><code>{{ c.customer }}</code></td>
-  <td>{% if c.group_id %}<code>{{ c.group_id }}</code>{% else %}—{% endif %}</td>
-  <td class="msg">{{ c.user_msg }}</td>
-  <td class="msg">{{ c.bot_msg }}</td>
+  <td><span class="badge {% if c.role == 'user' %}badge-green{% else %}badge-yellow{% endif %}">{{ c.role }}</span></td>
+  <td class="msg">{{ c.msg }}</td>
   <td style="white-space:nowrap">{{ c.ts }}</td>
 </tr>
 {% endfor %}
