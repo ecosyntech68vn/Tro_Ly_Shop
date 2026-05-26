@@ -13,7 +13,10 @@ Tác giả: Tạ Quang Thuận · AI Thực Chiến · 2026
 import os
 import re
 import io
+import time
+import random
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 from flask import Flask, request, jsonify, abort, send_file, session, redirect, url_for, render_template
@@ -57,13 +60,117 @@ TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 BOT_USERNAME = "TroLyAIThucChien_bot"
 BOT_ID = None  # resolved at runtime from first my_chat_member
 
+def _safe_submit_ai(chat_id, *args):
+    """Submit AI task with bounded queue.
+    Nếu queue đầy (>=128 tasks), từ chối ngay — không để OOM.
+    Trả về True nếu task được submit, False nếu queue full."""
+    if not AI_SEMAPHORE.acquire(blocking=False):
+        tg_send(chat_id, "⚠️ Hệ thống đang quá tải. Vui lòng thử lại sau ít phút 🙏")
+        return False
+
+    def _run_and_release():
+        try:
+            _execute_ai_response(*args)
+        finally:
+            AI_SEMAPHORE.release()
+
+    AI_EXECUTOR.submit(_run_and_release)
+    return True
+
+
 # Thread pool for non-blocking AI calls
 AI_EXECUTOR = ThreadPoolExecutor(max_workers=32)
+AI_SEMAPHORE = threading.BoundedSemaphore(128)  # max 128 queued+running AI tasks
 HISTORY_LIMIT = 10  # conversation memory depth
 
-# Rating & Correction state
-RATING_STATE = {}  # (chat_id, msg_id) -> {"question": str, "owner_chat_id": int}
-PENDING_CORRECTION = {}  # owner_chat_id -> {"question": str}
+
+class ThreadSafeDict:
+    """Dict wrapper with built-in lock and TTL pruning.
+    Thread-safe for concurrent reads/writes from webhook + executor threads.
+    TTL tự động dọn entries cũ, không cần cron."""
+    def __init__(self, ttl=300):
+        self._lock = threading.Lock()
+        self._data = {}
+        self._ttl = ttl
+        self._access_count = 0
+
+    def _prune(self):
+        now = time.time()
+        cutoff = now - self._ttl
+        old = len(self._data)
+        self._data = {k: v for k, v in self._data.items()
+                      if v.get('_ts', 0) > cutoff}
+        if old and len(self._data) < old:
+            logging.getLogger(__name__).info(f"Pruned {old - len(self._data)} expired entries from {type(self).__name__}")
+
+    def __setitem__(self, key, value):
+        with self._lock:
+            value = dict(value)
+            value['_ts'] = time.time()
+            self._data[key] = value
+            self._access_count += 1
+            if self._access_count % 50 == 0:
+                self._prune()
+
+    def pop(self, key, *args):
+        with self._lock:
+            self._access_count += 1
+            if self._access_count % 50 == 0:
+                self._prune()
+            return self._data.pop(key, *args)
+
+    def __contains__(self, key):
+        with self._lock:
+            self._access_count += 1
+            if self._access_count % 50 == 0:
+                self._prune()
+            return key in self._data
+
+    def __getitem__(self, key):
+        with self._lock:
+            return self._data[key]
+
+    def get(self, key, default=None):
+        with self._lock:
+            self._access_count += 1
+            if self._access_count % 50 == 0:
+                self._prune()
+            return self._data.get(key, default)
+
+    def clear(self):
+        with self._lock:
+            self._data.clear()
+
+
+class DedupSet:
+    """In-memory dedup cho Telegram update_id.
+    Giữ tối đa MAX_ENTRIES entries, tự động cleanup.
+    Không cần DB — nhanh hơn và không tốn I/O."""
+    MAX_ENTRIES = 20000
+
+    def __init__(self, ttl=120):
+        self._lock = threading.Lock()
+        self._data = {}  # update_id -> timestamp
+        self._ttl = ttl
+
+    def seen(self, update_id):
+        """Check if update_id was processed. If not, mark it and return False."""
+        with self._lock:
+            now = time.time()
+            # Periodic bulk cleanup when too large
+            if len(self._data) > self.MAX_ENTRIES:
+                cutoff = now - self._ttl
+                self._data = {k: v for k, v in self._data.items() if v > cutoff}
+            if update_id in self._data:
+                return True
+            self._data[update_id] = now
+            return False
+
+
+# Rating & Correction state — thread-safe with auto-cleanup
+RATING_STATE = ThreadSafeDict(ttl=300)  # 5 phút là expired
+PENDING_CORRECTION = ThreadSafeDict(ttl=600)  # 10 phút chờ sửa
+PROCESSED_UPDATES = DedupSet(ttl=120)  # 2 phút dedup window
 
 # Startup validation
 if not BOT_TOKEN:
@@ -541,9 +648,8 @@ def handle_agent_chat(chat_id, text):
     # Reserve message slot before async call
     increment_msg_count(chat_id)
 
-    # Submit AI call to background thread — webhook returns immediately
-    AI_EXECUTOR.submit(_execute_ai_response, chat_id, chat_id, "owner",
-                       system_prompt, text, model)
+    # Submit AI call to background thread with bounded queue
+    _safe_submit_ai(chat_id, chat_id, chat_id, "owner", system_prompt, text, model)
     return True
 
 
@@ -816,9 +922,9 @@ def handle_group_message(chat_id, msg, text):
     # Reserve message slot before async call
     increment_msg_count(owner_chat_id)
 
-    # Submit AI call to background thread — per-sender memory
-    AI_EXECUTOR.submit(_execute_ai_response, chat_id, owner_chat_id,
-                       f"g{chat_id}_u{sender_id}", system_prompt, clean, model)
+    # Submit AI call to background thread with bounded queue — per-sender memory
+    _safe_submit_ai(chat_id, chat_id, owner_chat_id, f"g{chat_id}_u{sender_id}",
+                    system_prompt, clean, model)
     return True
 
 
@@ -1607,7 +1713,14 @@ def api_chat():
 def telegram_webhook():
     """Nhận update từ Telegram Bot API."""
     update = request.get_json(silent=True) or {}
-    log.info(f"TG update: {update.get('update_id')}")
+
+    # Dedup: skip if this update was already processed
+    update_id = update.get("update_id")
+    if update_id is not None:
+        if PROCESSED_UPDATES.seen(update_id):
+            log.info(f"Duplicate update {update_id} — skipped")
+            return jsonify({"ok": True})
+        log.info(f"TG update: {update_id}")
 
     # Callback query (inline button click)
     if "callback_query" in update:
