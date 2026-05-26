@@ -25,8 +25,8 @@ import requests
 
 from config import (
     BOT_TOKEN, SEPAY_API_KEY, BANK_ACCOUNT, BANK_NAME, BANK_OWNER,
-    ADMIN_CHAT_ID, PRODUCTS, BASE_URL, SECRET_KEY,
-    GEMINI_API_KEY, CLAUDE_API_KEY, OPENAI_API_KEY
+    BASE_URL, SECRET_KEY, PRODUCTS, GEMINI_API_KEY, CLAUDE_API_KEY,
+    OPENAI_API_KEY, ADMIN_CHAT_ID, ADMIN_PASSWORD,
 )
 from db import (
     init_db, create_order, mark_order_paid, get_pending_order_by_code, get_order_status, expire_stale_orders, PENDING_TIMEOUT_MINUTES,
@@ -210,9 +210,15 @@ RENEWAL_NOTIFIED = ThreadSafeDict(ttl=86400)  # 1 ngày — tránh spam renewal 
 
 def detect_negative_sentiment(text):
     """Quick keyword-based negative sentiment detection for Vietnamese + English."""
+    from agent_db import _nd
     tl = text.lower()
+    nd_tl = _nd(text)
     for kw in SENTIMENT_NEGATIVE:
-        if kw in tl:
+        kw_lower = kw.lower()
+        if kw_lower in tl:
+            return True
+        nd_kw = _nd(kw)
+        if nd_kw and nd_kw in nd_tl:
             return True
     return False
 
@@ -1992,6 +1998,86 @@ def cron_backup():
     except Exception as e:
         log.exception(f"Backup cron failed: {e}")
         return f"ERROR: {e}", 500
+
+
+# ========== ADMIN DASHBOARD ==========
+
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        pw = (request.form.get("password") or "").strip()
+        if pw == ADMIN_PASSWORD:
+            session["_admin"] = True
+            return redirect(url_for("admin_index"))
+        return render_template("admin/login.html", error="Sai mat khau")
+    return render_template("admin/login.html")
+
+
+def _admin_auth():
+    if not session.get("_admin"):
+        return None
+    return True
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("_admin", None)
+    return redirect(url_for("admin_login"))
+
+
+@app.route("/admin")
+def admin_index():
+    if not _admin_auth():
+        return redirect(url_for("admin_login"))
+    from db import conn as db_conn
+    with db_conn() as c:
+        subs = c.execute("SELECT COUNT(*) as n FROM agent_subscriptions WHERE status='active'").fetchone()
+        agents = c.execute("SELECT COUNT(*) as n FROM agent_profiles WHERE onboarding_done=1").fetchone()
+        total_orders = c.execute("SELECT COUNT(*) as n FROM agent_orders").fetchone()
+        pending_orders = c.execute("SELECT COUNT(*) as n FROM agent_orders WHERE status='pending'").fetchone()
+        unmatched = c.execute("SELECT COUNT(*) as n FROM unmatched_payments").fetchone() if not USE_PG else {"n": 0}
+    stats = dict(
+        subscriptions=subs["n"] if subs else 0,
+        agents=agents["n"] if agents else 0,
+        total_orders=total_orders["n"] if total_orders else 0,
+        pending_orders=pending_orders["n"] if pending_orders else 0,
+        unmatched=unmatched["n"] if unmatched else 0,
+    )
+    return render_template("admin/index.html", stats=stats)
+
+
+@app.route("/admin/orders")
+def admin_orders():
+    if not _admin_auth():
+        return redirect(url_for("admin_login"))
+    from db import conn as db_conn
+    with db_conn() as c:
+        if not USE_PG:
+            rows = c.execute(
+                "SELECT o.code, o.chat_id, o.sku, o.amount, o.status, o.created_at, o.paid_at, p.name as prod_name"
+                " FROM orders o LEFT JOIN product_links p ON o.sku = p.sku"
+                " ORDER BY o.created_at DESC LIMIT 100"
+            ).fetchall()
+        else:
+            rows = []
+    return render_template("admin/orders.html", orders=rows or [])
+
+
+@app.route("/admin/unmatched")
+def admin_unmatched():
+    if not _admin_auth():
+        return redirect(url_for("admin_login"))
+    from db import conn as db_conn
+    with db_conn() as c:
+        if not USE_PG:
+            rows = c.execute(
+                "SELECT tx_id, amount, content, reference, created_at"
+                " FROM unmatched_payments ORDER BY created_at DESC LIMIT 100"
+            ).fetchall()
+        else:
+            rows = []
+    return render_template("admin/unmatched.html", payments=rows or [])
 
 
 @app.after_request

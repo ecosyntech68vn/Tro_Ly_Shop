@@ -1,0 +1,168 @@
+"""Test database CRUD operations for all agent tables."""
+import pytest
+from agent_db import (
+    create_agent_order, get_shop_orders, update_order_status, get_order_stats,
+    create_appointment, get_shop_appointments, update_appointment_status,
+    create_subscription, get_subscription, can_send_message,
+    save_shop_profile, get_shop_profile, is_onboarding_complete,
+    save_chat, get_recent_conversation, search_products, import_products_from_csv,
+    save_correction, find_correction_match, count_corrections,
+    get_agent_stats,
+)
+from db import conn
+
+
+class TestOrders:
+    def test_create_and_flow(self):
+        o = create_agent_order(100, "cust1", "Product A", 2, 50000, "note", "info")
+        assert o["id"] > 0
+        assert o["status"] == "pending"
+
+        orders = get_shop_orders(100)
+        assert len(orders) == 1
+        assert orders[0]["product_name"] == "Product A"
+
+        assert update_order_status(o["id"], 100, "confirmed")
+        assert update_order_status(o["id"], 100, "shipped")
+        assert update_order_status(o["id"], 100, "delivered")
+
+        stats = get_order_stats(100)
+        assert stats["delivered"] == 1
+
+        with conn() as c:
+            c.execute("DELETE FROM agent_orders WHERE owner_chat_id=100")
+
+    def test_wrong_owner_cant_update(self):
+        o = create_agent_order(101, "cust1", "Item", 1, 100, "", "")
+        assert not update_order_status(o["id"], 999, "confirmed")
+        with conn() as c:
+            c.execute("DELETE FROM agent_orders WHERE owner_chat_id=101")
+
+
+class TestAppointments:
+    def test_crud(self):
+        a = create_appointment(200, "Nguyen Van A", "0909123456", "Cat toc", "2026-06-01", "14:00", "Khach quen")
+        assert a["id"] > 0
+        assert a["status"] == "pending"
+
+        appts = get_shop_appointments(200)
+        assert len(appts) == 1
+        assert appts[0]["customer_name"] == "Nguyen Van A"
+
+        assert update_appointment_status(a["id"], 200, "confirmed")
+        assert update_appointment_status(a["id"], 200, "done")
+
+        with conn() as c:
+            c.execute("DELETE FROM agent_appointments WHERE owner_chat_id=200")
+
+    def test_filter_by_status(self):
+        a = create_appointment(201, "Customer", "0909", "Service", "2026-06-02", "10:00", "")
+        appts = get_shop_appointments(201, status="pending")
+        assert len(appts) == 1
+        appts_done = get_shop_appointments(201, status="done")
+        assert len(appts_done) == 0
+        with conn() as c:
+            c.execute("DELETE FROM agent_appointments WHERE owner_chat_id=201")
+
+
+class TestSubscription:
+    CHAT_ID = 300
+
+    def test_create_and_get(self):
+        exp = create_subscription(self.CHAT_ID, "agent_basic", "gemini", 30)
+        assert exp is not None
+
+        sub = get_subscription(self.CHAT_ID)
+        assert sub is not None
+        assert sub["plan"] == "agent_basic"
+        assert sub["status"] == "active"
+
+        can, reason = can_send_message(self.CHAT_ID)
+        assert can is True
+
+        with conn() as c:
+            c.execute("DELETE FROM agent_subscriptions WHERE chat_id=?", (self.CHAT_ID,))
+
+
+class TestProfile:
+    CHAT_ID = 400
+
+    def test_save_and_get(self):
+        save_shop_profile(self.CHAT_ID, "Test Shop", "thoi-trang", "", "", "", "")
+        p = get_shop_profile(self.CHAT_ID)
+        assert p is not None
+        assert p["shop_name"] == "Test Shop"
+        assert p["industry"] == "thoi-trang"
+
+        done = is_onboarding_complete(self.CHAT_ID)
+        assert done is True
+
+        with conn() as c:
+            c.execute("DELETE FROM agent_profiles WHERE chat_id=?", (self.CHAT_ID,))
+
+
+class TestChatHistory:
+    def test_save_and_recent(self):
+        save_chat(500, "cust_x", "user", "hello", "gemini")
+        save_chat(500, "cust_x", "agent", "hi there", "gemini")
+        hist = get_recent_conversation(500, "cust_x", limit=5)
+        assert len(hist) == 2
+        assert hist[0]["role"] == "user"
+        with conn() as c:
+            c.execute("DELETE FROM agent_chats WHERE owner_chat_id=500")
+
+    def test_limit(self):
+        for i in range(15):
+            save_chat(501, "cust_y", "user", str(i), "gemini")
+        hist = get_recent_conversation(501, "cust_y", limit=10)
+        assert len(hist) <= 10
+        with conn() as c:
+            c.execute("DELETE FROM agent_chats WHERE owner_chat_id=501")
+
+
+class TestProducts:
+    def test_search(self):
+        csv = "name,sku,price\nProduct One,sp001,50000\nProduct Two,sp002,100000\n"
+        count = import_products_from_csv(600, csv)
+        assert count == 2
+
+        results = search_products(600, "Product", limit=5)
+        assert len(results) == 2
+
+        results = search_products(600, "One", limit=5)
+        assert len(results) == 1
+        assert results[0]["name"] == "Product One"
+
+        with conn() as c:
+            c.execute("DELETE FROM agent_products WHERE owner_chat_id=600")
+
+
+class TestCorrections:
+    def test_save_and_match(self):
+        save_correction(700, "gia bao nhieu", "Gia la 50.000d")
+        count = count_corrections(700)
+        assert count == 1
+
+        match = find_correction_match(700, "gia bao nhieu", threshold=0.45)
+        assert match is not None
+        assert match[1] == "Gia la 50.000d"
+
+        match = find_correction_match(700, "khong lien quan gi ca", threshold=0.45)
+        assert match is None
+
+        with conn() as c:
+            c.execute("DELETE FROM agent_learned WHERE owner_chat_id=700")
+
+    def test_no_match_for_empty(self):
+        match = find_correction_match(701, "", threshold=0.45)
+        assert match is None
+
+
+class TestSentiment:
+    def test_negative_detection(self):
+        from app import detect_negative_sentiment
+        assert detect_negative_sentiment("Toi rat tuc gian")
+        assert detect_negative_sentiment("This is a complaint")
+        assert detect_negative_sentiment("dich vu scam mat tien")
+        assert not detect_negative_sentiment("Cam on shop, hang dep qua")
+        assert not detect_negative_sentiment("Bao gio co hang a?")

@@ -1,0 +1,23 @@
+{% extends "admin/layout.html" %}
+{% block content %}
+<div class="header"><h1>⚠️ Giao dịch không khớp</h1></div>
+
+{% if payments %}
+<table>
+  <thead><tr><th>Tx ID</th><th>Số tiền</th><th>Nội dung</th><th>Reference</th><th>Thời gian</th></tr></thead>
+  <tbody>
+  {% for p in payments %}
+  <tr>
+    <td><code>{{ p.tx_id }}</code></td>
+    <td>{{ "{:,}".format(p.amount) }}đ</td>
+    <td>{{ p.content }}</td>
+    <td>{{ p.reference or '-' }}</td>
+    <td style="font-size:12px;color:#888">{{ p.created_at[:16] if p.created_at else '' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">Không có giao dịch không khớp.</div>
+{% endif %}
+{% endblock %}

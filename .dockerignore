@@ -1,0 +1,12 @@
+__pycache__
+*.pyc
+.env
+.git
+.gitignore
+*.db
+backups/*
+!backups/.gitkeep
+copywriter-viet-pro.zip
+README.md
+*.md
+tests/

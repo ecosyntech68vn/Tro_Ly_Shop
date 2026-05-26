@@ -1,0 +1,22 @@
+{% extends "admin/layout.html" %}
+{% block content %}
+<div class="header"><h1>📊 Tổng quan</h1></div>
+
+<div class="cards">
+  <div class="card"><div class="num">{{ stats.subscriptions }}</div><div class="label">Thuê bao active</div></div>
+  <div class="card"><div class="num">{{ stats.agents }}</div><div class="label">Shop đã onboard</div></div>
+  <div class="card"><div class="num">{{ stats.total_orders }}</div><div class="label">Tổng đơn hàng</div></div>
+  <div class="card"><div class="num">{{ stats.pending_orders }}</div><div class="label">Đơn chờ xử lý</div></div>
+  <div class="card"><div class="num">{{ stats.unmatched }}</div><div class="label">GD không khớp</div></div>
+</div>
+
+<div style="background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+<h3 style="margin-bottom:12px">🧭 Hướng dẫn nhanh</h3>
+<table>
+<tr><td><code>/confirm CODE</code></td><td>Xác nhận đơn thủ công (Telegram)</td></tr>
+<tr><td><code>/set_link SKU URL</code></td><td>Cập nhật link tải sản phẩm</td></tr>
+<tr><td><code>/admin_today</code></td><td>Xem tổng quan hôm nay</td></tr>
+<tr><td><code>/backup</code></td><td>Chạy backup thủ công</td></tr>
+</table>
+</div>
+{% endblock %}

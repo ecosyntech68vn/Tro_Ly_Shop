@@ -29,6 +29,7 @@ BANK_OWNER = os.environ.get("BANK_OWNER", "TA QUANG THUAN")
 # ===== Hosting =====
 BASE_URL = os.environ.get("BASE_URL", "https://your-app.railway.app")
 SECRET_KEY = os.environ.get("SECRET_KEY", os.urandom(24).hex())
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 # ===== Sản phẩm =====
 # Link Drive được lưu trong DB (cập nhật qua /set_link), giá cố định ở đây

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Login - AI Agent</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f0f2f5;display:flex;align-items:center;justify-content:center;min-height:100vh}
+form{background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08);max-width:360px;width:100%}
+h2{margin-bottom:20px;font-size:20px;color:#1a1a2e;text-align:center}
+input{width:100%;padding:10px 14px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:16px}
+input:focus{border-color:#0088cc;outline:0}
+button{width:100%;padding:10px;background:#0088cc;color:#fff;border:0;border-radius:8px;font-size:14px;cursor:pointer}
+button:hover{background:#0070aa}
+.error{color:#e53935;font-size:13px;margin-bottom:12px;text-align:center}
+</style>
+</head>
+<body>
+<form method="POST">
+  <h2>⚙️ Admin Login</h2>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <input type="password" name="password" placeholder="Mật khẩu admin" autofocus>
+  <button type="submit">Đăng nhập</button>
+</form>
+</body>
+</html>

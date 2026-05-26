@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin - AI Agent</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f0f2f5;display:flex;min-height:100vh}
+.sidebar{width:220px;background:#1a1a2e;color:#fff;padding:24px 0;flex-shrink:0}
+.sidebar h2{padding:0 20px 24px;font-size:16px;border-bottom:1px solid #2a2a4e}
+.sidebar nav{margin-top:16px}
+.sidebar a{display:block;padding:10px 20px;color:#ccc;text-decoration:none;font-size:13px}
+.sidebar a:hover,.sidebar a.active{background:#2a2a4e;color:#fff}
+.main{flex:1;padding:32px;overflow-y:auto}
+.header{margin-bottom:24px}
+.header h1{font-size:22px;color:#1a1a2e}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:24px}
+.card{background:#fff;border-radius:10px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.card .num{font-size:26px;font-weight:700;color:#1a1a2e}
+.card .label{font-size:12px;color:#888;margin-top:4px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+th,td{padding:10px 14px;text-align:left;font-size:13px}
+th{background:#f8f9fa;color:#666;font-weight:600}
+tr{border-bottom:1px solid #f0f0f0}
+.badge{padding:2px 8px;border-radius:10px;font-size:11px}
+.badge-pending{background:#fff8e1;color:#f57f17}
+.badge-paid{background:#e8f5e9;color:#2e7d32}
+.badge-expired{background:#fbe9e7;color:#c62828}
+.btn{display:inline-block;padding:6px 14px;border-radius:6px;border:0;font-size:12px;cursor:pointer;text-decoration:none}
+.btn-primary{background:#0088cc;color:#fff}
+.btn-danger{background:#e53935;color:#fff}
+form{background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.06);max-width:360px;margin:80px auto}
+form h2{margin-bottom:16px;font-size:18px}
+form input{width:100%;padding:10px 14px;border:1px solid #ddd;border-radius:6px;font-size:14px;margin-bottom:14px}
+.error{color:#e53935;font-size:13px;margin-bottom:10px}
+.empty{padding:40px;text-align:center;color:#999}
+</style>
+</head>
+<body>
+{% if session.get('_admin') %}
+<div class="sidebar">
+<h2>⚙️ Admin</h2>
+<nav>
+<a href="/admin" class="{% if request.path == '/admin' %}active{% endif %}">📊 Tổng quan</a>
+<a href="/admin/orders" class="{% if request.path == '/admin/orders' %}active{% endif %}">📦 Đơn hàng</a>
+<a href="/admin/unmatched" class="{% if request.path == '/admin/unmatched' %}active{% endif %}">⚠️ GD không khớp</a>
+<a href="/admin/logout" style="margin-top:24px;border-top:1px solid #2a2a4e;padding-top:16px">🚪 Đăng xuất</a>
+</nav>
+</div>
+{% endif %}
+<div class="main">
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>

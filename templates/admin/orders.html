@@ -1,0 +1,30 @@
+{% extends "admin/layout.html" %}
+{% block content %}
+<div class="header"><h1>📦 Đơn hàng</h1></div>
+
+{% if orders %}
+<table>
+  <thead><tr><th>Mã đơn</th><th>KH</th><th>SKU</th><th>Tiền</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thanh toán</th></tr></thead>
+  <tbody>
+  {% for o in orders %}
+  <tr>
+    <td><code>{{ o.code }}</code></td>
+    <td><code>{{ o.chat_id }}</code></td>
+    <td>{{ o.prod_name or o.sku }}</td>
+    <td>{{ "{:,}".format(o.amount) }}đ</td>
+    <td>
+      {% if o.status == 'pending' %}<span class="badge badge-pending">⏳ Chờ</span>
+      {% elif o.status == 'paid' %}<span class="badge badge-paid">✅ Đã thanh toán</span>
+      {% elif o.status == 'expired' %}<span class="badge badge-expired">⌛ Hết hạn</span>
+      {% else %}<span>{{ o.status }}</span>{% endif %}
+    </td>
+    <td style="font-size:12px;color:#888">{{ o.created_at[:16] if o.created_at else '' }}</td>
+    <td style="font-size:12px;color:#888">{{ o.paid_at[:16] if o.paid_at else '-' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">Không có đơn hàng trong DB (hoặc đang dùng PostgreSQL).</div>
+{% endif %}
+{% endblock %}
