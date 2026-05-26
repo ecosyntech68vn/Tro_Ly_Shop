@@ -1,0 +1,78 @@
+{% extends "dashboard/layout.html" %}
+{% block content %}
+<div class="header">
+  <h1>🛒 Đơn hàng</h1>
+  <p>Quản lý đơn hàng từ khách</p>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="num">{{ stats.pending }}</div><div class="label">⏳ Chờ xác nhận</div></div>
+  <div class="card"><div class="num">{{ stats.confirmed }}</div><div class="label">✅ Đã xác nhận</div></div>
+  <div class="card"><div class="num">{{ stats.shipped }}</div><div class="label">🚚 Đang giao</div></div>
+  <div class="card"><div class="num">{{ stats.delivered }}</div><div class="label">✔️ Đã giao</div></div>
+  <div class="card"><div class="num">{{ stats.cancelled }}</div><div class="label">❌ Đã huỷ</div></div>
+</div>
+
+<div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
+  <a href="/dashboard/orders" class="btn btn-primary btn-sm {% if not current_status %}active{% endif %}">Tất cả</a>
+  <a href="/dashboard/orders?status=pending" class="btn btn-sm {% if current_status == 'pending' %}btn-primary{% endif %}" style="background:{% if current_status != 'pending' %}#eee;color:#333{% endif %}">⏳ Chờ</a>
+  <a href="/dashboard/orders?status=confirmed" class="btn btn-sm {% if current_status == 'confirmed' %}btn-primary{% endif %}" style="background:{% if current_status != 'confirmed' %}#eee;color:#333{% endif %}">✅ Đã xác nhận</a>
+  <a href="/dashboard/orders?status=shipped" class="btn btn-sm {% if current_status == 'shipped' %}btn-primary{% endif %}" style="background:{% if current_status != 'shipped' %}#eee;color:#333{% endif %}">🚚 Đang giao</a>
+  <a href="/dashboard/orders?status=delivered" class="btn btn-sm {% if current_status == 'delivered' %}btn-primary{% endif %}" style="background:{% if current_status != 'delivered' %}#eee;color:#333{% endif %}">✔️ Đã giao</a>
+</div>
+
+{% if orders %}
+<table>
+  <thead>
+    <tr>
+      <th>#</th><th>SP</th><th>SL</th><th>Tiền</th><th>Khách</th><th>Ghi chú</th><th>Trạng thái</th><th>Ngày</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for o in orders %}
+    <tr>
+      <td>{{ o.id }}</td>
+      <td>{{ o.product_name }}</td>
+      <td>{{ o.quantity }}</td>
+      <td>{{ "{:,}".format(o.amount) }}đ</td>
+      <td class="msg">{{ o.customer_info[:60] }}</td>
+      <td class="msg">{{ o.note[:60] }}</td>
+      <td>
+        {% if o.status == 'pending' %}<span class="badge badge-yellow">⏳ Chờ</span>
+        {% elif o.status == 'confirmed' %}<span class="badge badge-green">✅ Đã xác nhận</span>
+        {% elif o.status == 'shipped' %}<span class="badge" style="background:#e3f2fd;color:#1565c0">🚚 Đang giao</span>
+        {% elif o.status == 'delivered' %}<span class="badge badge-green">✔️ Đã giao</span>
+        {% elif o.status == 'cancelled' %}<span class="badge badge-red">❌ Đã huỷ</span>
+        {% endif %}
+      </td>
+      <td style="font-size:12px;color:#888">{{ o.created_at[:16] }}</td>
+      <td style="white-space:nowrap">
+        {% if o.status == 'pending' %}
+        <form method="POST" action="/dashboard/orders/update" style="display:inline">
+          <input type="hidden" name="id" value="{{ o.id }}">
+          <button name="action" value="confirm" class="btn btn-sm" style="background:#4caf50;color:#fff">✅ Xác nhận</button>
+        </form>
+        <form method="POST" action="/dashboard/orders/update" style="display:inline">
+          <input type="hidden" name="id" value="{{ o.id }}">
+          <button name="action" value="cancel" class="btn btn-sm btn-danger">Huỷ</button>
+        </form>
+        {% elif o.status == 'confirmed' %}
+        <form method="POST" action="/dashboard/orders/update" style="display:inline">
+          <input type="hidden" name="id" value="{{ o.id }}">
+          <button name="action" value="ship" class="btn btn-sm" style="background:#1565c0;color:#fff">🚚 Giao</button>
+        </form>
+        {% elif o.status == 'shipped' %}
+        <form method="POST" action="/dashboard/orders/update" style="display:inline">
+          <input type="hidden" name="id" value="{{ o.id }}">
+          <button name="action" value="deliver" class="btn btn-sm" style="background:#4caf50;color:#fff">✔️ Đã giao</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">Chưa có đơn hàng nào.</div>
+{% endif %}
+{% endblock %}

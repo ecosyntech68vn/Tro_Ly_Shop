@@ -313,6 +313,62 @@ def count_corrections(owner_chat_id):
         return row[0] if row else 0
 
 
+# ========== ORDER MANAGEMENT ==========
+
+def create_agent_order(owner_chat_id, customer_id, product_name, quantity, amount, note="", customer_info=""):
+    """Create a customer order for the shop. Returns order dict."""
+    now = datetime.utcnow().isoformat()
+    with conn() as c:
+        cur = c.execute(
+            """INSERT INTO agent_orders(owner_chat_id, customer_id, product_name, quantity, amount,
+               status, note, customer_info, created_at)
+               VALUES(?, ?, ?, ?, ?, 'pending', ?, ?, ?)""",
+            (owner_chat_id, customer_id, product_name, quantity, amount, note, customer_info, now)
+        )
+        oid = cur.lastrowid
+        return {"id": oid, "status": "pending", "created_at": now}
+
+
+def get_shop_orders(owner_chat_id, status=None, limit=50):
+    """Get orders for a shop, optionally filtered by status."""
+    with conn() as c:
+        if status:
+            rows = c.execute(
+                "SELECT * FROM agent_orders WHERE owner_chat_id=? AND status=? ORDER BY created_at DESC LIMIT ?",
+                (owner_chat_id, status, limit)
+            ).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT * FROM agent_orders WHERE owner_chat_id=? ORDER BY created_at DESC LIMIT ?",
+                (owner_chat_id, limit)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_order_status(order_id, owner_chat_id, new_status):
+    """Update order status. Returns True if found and updated."""
+    now = datetime.utcnow().isoformat()
+    with conn() as c:
+        cur = c.execute(
+            "UPDATE agent_orders SET status=?, updated_at=? WHERE id=? AND owner_chat_id=?",
+            (new_status, now, order_id, owner_chat_id)
+        )
+        return cur.rowcount > 0
+
+
+def get_order_stats(owner_chat_id):
+    """Get order counts by status for a shop."""
+    with conn() as c:
+        rows = c.execute(
+            "SELECT status, COUNT(*) as cnt FROM agent_orders WHERE owner_chat_id=? GROUP BY status",
+            (owner_chat_id,)
+        ).fetchall()
+    stats = {r["status"]: r["cnt"] for r in rows}
+    for s in ("pending", "confirmed", "shipped", "delivered", "cancelled"):
+        stats.setdefault(s, 0)
+    return stats
+
+
 def format_products_text(products):
     """Format product list for prompt injection."""
     if not products:
@@ -383,7 +439,15 @@ HƯỚNG DẪN:
 - Nếu không biết, nói thật là không biết — đừng bịa
 - Kết thúc bằng một câu hỏi hoặc gợi ý nếu phù hợp"""
 
+    order_instruction = (
+        "\n\nĐẶT HÀNG:\n"
+        "- Khi khách muốn đặt hàng, hãy hỏi rõ: sản phẩm gì, số lượng, tên, số điện thoại, địa chỉ\n"
+        "- Sau khi khách xác nhận, kết thúc tin nhắn bằng dòng:\n"
+        "  🛒 ĐƠN HÀNG | sản phẩm | số lượng | thành tiền | ghi chú | tên, sđt, địa chỉ\n"
+        "- Ví dụ: 🛒 ĐƠN HÀNG | Áo thun trắng | 2 | 400000 | Giao giờ hành chính | Nguyễn Văn A, 0909123456, 123 Nguyễn Huệ Q1"
+    )
     system_with_products = _inject_product_context(system, chat_id, user_message)
+    system_with_products += order_instruction
     return system_with_products, f"{system_with_products}\n\nNgười dùng: {user_message}\n\nTrợ lý:"
 
 
@@ -420,7 +484,15 @@ HƯỚNG DẪN:
 - Luôn giữ thái độ hỗ trợ, không tranh luận với khách hàng
 - KHÔNG chào hỏi dài dòng — trả lời thẳng câu hỏi"""
 
+    order_instruction = (
+        "\n\nĐẶT HÀNG:\n"
+        "- Khi khách muốn đặt hàng, hãy hỏi rõ: sản phẩm gì, số lượng, tên, số điện thoại, địa chỉ\n"
+        "- Sau khi khách xác nhận, kết thúc tin nhắn bằng dòng:\n"
+        "  🛒 ĐƠN HÀNG | sản phẩm | số lượng | thành tiền | ghi chú | tên, sđt, địa chỉ\n"
+        "- Ví dụ: 🛒 ĐƠN HÀNG | Áo thun trắng | 2 | 400000 | Giao giờ hành chính | Nguyễn Văn A, 0909123456, 123 Nguyễn Huệ Q1"
+    )
     system_with_products = _inject_product_context(system, owner_chat_id, user_message)
+    system_with_products += order_instruction
     return system_with_products, f"{system_with_products}\n\nKhách hàng ({sender_name}): {user_message}\n\nTrợ lý:"
 
 
@@ -511,6 +583,22 @@ def init_agent_tables():
             created_at    TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_agent_learned_owner ON agent_learned(owner_chat_id);
+
+        CREATE TABLE IF NOT EXISTS agent_orders (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_chat_id INTEGER NOT NULL,
+            customer_id   TEXT NOT NULL DEFAULT '',
+            product_name  TEXT NOT NULL DEFAULT '',
+            quantity      INTEGER DEFAULT 1,
+            amount        INTEGER DEFAULT 0,
+            status        TEXT NOT NULL DEFAULT 'pending',
+            note          TEXT DEFAULT '',
+            customer_info TEXT DEFAULT '',
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_orders_owner ON agent_orders(owner_chat_id);
+        CREATE INDEX IF NOT EXISTS idx_agent_orders_status ON agent_orders(owner_chat_id, status);
         """,
         """
         CREATE TABLE IF NOT EXISTS agent_subscriptions (
@@ -590,6 +678,22 @@ def init_agent_tables():
             created_at    TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_agent_learned_owner ON agent_learned(owner_chat_id);
+
+        CREATE TABLE IF NOT EXISTS agent_orders (
+            id            SERIAL PRIMARY KEY,
+            owner_chat_id BIGINT NOT NULL,
+            customer_id   TEXT NOT NULL DEFAULT '',
+            product_name  TEXT NOT NULL DEFAULT '',
+            quantity      INTEGER DEFAULT 1,
+            amount        INTEGER DEFAULT 0,
+            status        TEXT NOT NULL DEFAULT 'pending',
+            note          TEXT DEFAULT '',
+            customer_info TEXT DEFAULT '',
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_orders_owner ON agent_orders(owner_chat_id);
+        CREATE INDEX IF NOT EXISTS idx_agent_orders_status ON agent_orders(owner_chat_id, status);
         """
     )
 

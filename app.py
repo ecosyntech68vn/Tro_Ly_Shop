@@ -47,6 +47,7 @@ from agent_db import (
     get_or_create_web_token, get_owner_by_web_token,
     import_products_from_csv, search_products, get_product_count, clear_products,
     save_correction, find_correction_match, count_corrections,
+    create_agent_order, get_shop_orders, update_order_status, get_order_stats,
 )
 
 logging.basicConfig(
@@ -202,6 +203,7 @@ LOGIN_RATE_LIMITER = RateLimiter(max_attempts=5, window=60)
 RATING_STATE = ThreadSafeDict(ttl=300)  # 5 phút là expired
 PENDING_CORRECTION = ThreadSafeDict(ttl=600)  # 10 phút chờ sửa
 PROCESSED_UPDATES = DedupSet(ttl=120)  # 2 phút dedup window
+RENEWAL_NOTIFIED = ThreadSafeDict(ttl=86400)  # 1 ngày — tránh spam renewal reminder
 
 # Startup validation
 if not BOT_TOKEN:
@@ -436,6 +438,24 @@ def handle_agent_subscribe(chat_id, plan_key):
     handle_mua(chat_id, f"agent_{plan_key}")
 
 
+def handle_agent_renew(chat_id):
+    """Handle /renew — generate renewal order for current subscription."""
+    sub = get_subscription(chat_id)
+    if not sub or sub["status"] != "active":
+        tg_send(chat_id, "Bạn chưa có thuê bao active. Gõ /start để xem các gói.")
+        return
+    try:
+        expires = datetime.fromisoformat(sub["expires_at"])
+        days_left = (expires - datetime.utcnow()).days
+    except:
+        days_left = 0
+    plan = AGENT_PLANS.get(sub["plan"])
+    if not plan:
+        tg_send(chat_id, "Gói không tồn tại. Liên hệ admin.")
+        return
+    handle_agent_subscribe(chat_id, sub["plan"])
+
+
 def handle_agent_dashboard(chat_id):
     """Show subscription status and settings."""
     sub = get_subscription(chat_id)
@@ -660,6 +680,29 @@ def handle_agent_chat(chat_id, text):
         start_onboarding(chat_id)
         return True
 
+    # Auto-renewal reminder (max 1x/day)
+    if not RENEWAL_NOTIFIED.contains(chat_id):
+        sub_r = get_subscription(chat_id)
+        if sub_r and sub_r["status"] == "active":
+            try:
+                exp = datetime.fromisoformat(sub_r["expires_at"])
+                days_left = (exp - datetime.utcnow()).days
+                if 0 < days_left <= 7:
+                    plan_name = AGENT_PLANS.get(sub_r["plan"], {}).get("name", sub_r["plan"])
+                    tg_send(chat_id,
+                        f"⏰ *Sắp hết hạn — còn {days_left} ngày*\n"
+                        f"Gói *{plan_name}* sẽ hết hạn sau {days_left} ngày.\n"
+                        f"👉 Gõ `/renew` để gia hạn, tránh gián đoạn.",
+                        reply_markup={
+                            "inline_keyboard": [
+                                [{"text": "🔄 Gia hạn ngay", "callback_data": f"agent_subscribe_{sub_r['plan']}"}],
+                            ]
+                        }
+                    )
+            except:
+                pass
+        RENEWAL_NOTIFIED.add(chat_id)
+
     # Build prompt with full context
     profile = get_shop_profile(chat_id)
     sub = get_subscription(chat_id)
@@ -873,6 +916,41 @@ def _execute_ai_response(chat_id, owner_chat_id, customer_id,
         save_chat(owner_chat_id, customer_id, "user", user_message, model)
         save_chat(owner_chat_id, customer_id, "agent", response_text, model)
         _send_with_rate(chat_id, response_text, owner_chat_id, user_message)
+
+        # Auto-create order from 🛒 ĐƠN HÀNG marker
+        if "🛒 ĐƠN HÀNG" in response_text:
+            try:
+                import re as _re
+                m = _re.search(r"🛒 ĐƠN HÀNG \| (.+)", response_text)
+                if m:
+                    parts = [p.strip() for p in m.group(1).split("|")]
+                    prod_name = parts[0] if len(parts) > 0 else ""
+                    qty = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+                    amt = int(parts[2].replace(",", "").replace(".", "")) if len(parts) > 2 else 0
+                    note = parts[3] if len(parts) > 3 else ""
+                    cust_info = parts[4] if len(parts) > 4 else ""
+                    order = create_agent_order(owner_chat_id, customer_id, prod_name, qty, amt, note, cust_info)
+                    # Notify shop owner
+                    profile = get_shop_profile(owner_chat_id)
+                    shop_name = profile.get("shop_name", "Shop") if profile else "Shop"
+                    tg_send(owner_chat_id,
+                        f"🛒 *Đơn hàng mới* #{order['id']}\n"
+                        f"*Shop:* {shop_name}\n"
+                        f"*Sản phẩm:* {prod_name}\n"
+                        f"*Số lượng:* {qty}\n"
+                        f"*Tổng tiền:* {amt:,}đ\n"
+                        f"*Khách:* {cust_info}\n"
+                        f"*Ghi chú:* {note}\n\n"
+                        f"👉 Xem tại Dashboard → Đơn hàng",
+                        reply_markup={
+                            "inline_keyboard": [
+                                [{"text": "✅ Xác nhận", "callback_data": f"order_confirm_{order['id']}"}],
+                                [{"text": "❌ Huỷ", "callback_data": f"order_cancel_{order['id']}"}],
+                            ]
+                        }
+                    )
+            except Exception as oe:
+                log.warning(f"Order parse error: {oe}")
     except Exception as e:
         log.exception(f"AI executor error: {e}")
         tg_send(chat_id, "❌ Có lỗi xảy ra. Vui lòng thử lại sau.")
@@ -1622,6 +1700,7 @@ def dashboard_index():
     plan = AGENT_PLANS.get(sub['plan'], {}).get('name', sub['plan']) if sub else "Chưa đăng ký"
     mode = mode_row['mode'] if mode_row else 'mention'
     mode_label = {'mention': 'Mention', 'smart': 'Smart', 'auto': 'Auto'}
+    order_stats = get_order_stats(cid)
     stats = dict(
         groups=grps['n'] if grps and grps['n'] else 0,
         products=prods['n'] if prods and prods['n'] else 0,
@@ -1629,6 +1708,7 @@ def dashboard_index():
         subscription=plan,
         chats_today=today['n'] if today and today['n'] else 0,
         mode=mode_label.get(mode, mode),
+        orders_pending=order_stats.get("pending", 0),
     )
     return render_template("dashboard/index.html", chat_id=cid, stats=stats, recent=recent or [])
 
@@ -1677,6 +1757,29 @@ def dashboard_catalog():
             "SELECT id, name, price, substr(description,1,100) as desc FROM agent_products WHERE owner_chat_id=? ORDER BY id DESC LIMIT 100", (cid,)
         ).fetchall()
     return render_template("dashboard/catalog.html", products=rows or [])
+
+@app.route("/dashboard/orders")
+def dashboard_orders():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    status = request.args.get("status", "")
+    orders = get_shop_orders(cid, status=status if status else None, limit=100)
+    stats = get_order_stats(cid)
+    return render_template("dashboard/orders.html", orders=orders, stats=stats, current_status=status)
+
+@app.route("/dashboard/orders/update", methods=["POST"])
+def dashboard_orders_update():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    oid = request.form.get("id", "")
+    action = request.form.get("action", "")
+    status_map = {"confirm": "confirmed", "ship": "shipped", "deliver": "delivered", "cancel": "cancelled"}
+    new_status = status_map.get(action)
+    if oid and new_status:
+        update_order_status(int(oid), cid, new_status)
+    return redirect(url_for('dashboard_orders'))
 
 @app.route("/dashboard/catalog/delete", methods=["POST"])
 def dashboard_catalog_delete():
@@ -1751,6 +1854,16 @@ def api_chat():
     save_chat(owner_id, f"web_{session}", "user", message, model)
     save_chat(owner_id, f"web_{session}", "agent", response_text, model)
     increment_msg_count(owner_id)
+
+    # Notify shop owner in Telegram
+    notify = (
+        f"🌐 *Khách chat từ website*\n"
+        f"*Shop:* {profile.get('shop_name', '—')}\n"
+        f"*Khách:* {message[:150]}\n"
+        f"*Bot:* {response_text[:150]}\n"
+        f"*Session:* `{session}`"
+    )
+    tg_send(owner_id, notify)
 
     return jsonify({"reply": response_text, "session": session})
 
@@ -1828,6 +1941,24 @@ def telegram_webhook():
             )
         elif data.startswith("mua_"):
             handle_mua(chat_id, data)
+        elif data.startswith("order_confirm_"):
+            oid = int(data.split("_")[2])
+            if update_order_status(oid, chat_id, "confirmed"):
+                tg_send(chat_id, f"✅ Đã xác nhận đơn hàng #{oid}")
+        elif data.startswith("order_cancel_"):
+            oid = int(data.split("_")[2])
+            if update_order_status(oid, chat_id, "cancelled"):
+                tg_send(chat_id, f"❌ Đã huỷ đơn hàng #{oid}")
+        elif data.startswith("order_ship_"):
+            oid = int(data.split("_")[2])
+            if update_order_status(oid, chat_id, "shipped"):
+                tg_send(chat_id, f"🚚 Đơn #{oid} đã chuyển sang giao hàng")
+        elif data.startswith("order_deliver_"):
+            oid = int(data.split("_")[2])
+            if update_order_status(oid, chat_id, "delivered"):
+                tg_send(chat_id, f"✅ Đơn #{oid} đã giao thành công")
+        elif data == "renew_sub":
+            handle_agent_renew(chat_id)
         elif data.startswith("onboard_"):
             handle_onboard_callback(chat_id, data)
         elif data == "agent_chat_mode":
@@ -1945,6 +2076,19 @@ def telegram_webhook():
         handle_webwidget(chat_id)
     elif text == "/webwidget_reset":
         handle_webwidget_reset(chat_id)
+    elif text == "/renew":
+        handle_agent_renew(chat_id)
+    elif text in ("/donhang", "/orders"):
+        orders = get_shop_orders(chat_id, limit=20)
+        if not orders:
+            tg_send(chat_id, "Chưa có đơn hàng nào.")
+        else:
+            lines = ["📋 *Đơn hàng gần đây:*\n"]
+            for o in orders[:10]:
+                status_icon = {"pending": "⏳", "confirmed": "✅", "shipped": "🚚", "delivered": "✔️", "cancelled": "❌"}
+                icon = status_icon.get(o["status"], "📄")
+                lines.append(f"{icon} `#{o['id']}` {o['product_name']} — {o['amount']:,}đ — {o['status']}")
+            tg_send(chat_id, "\n".join(lines))
     elif text == "/catalog":
         handle_catalog(chat_id)
     elif text == "/catalog_clear":
