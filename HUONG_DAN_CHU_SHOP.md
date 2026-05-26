@@ -1,0 +1,156 @@
+# Hướng dẫn sử dụng — Chủ shop (Người bán AI Agent)
+
+Dành cho người sở hữu sản phẩm AI Agent Thuê Bao — cách bán, định giá, vận hành.
+
+---
+
+## 1. Sản phẩm bạn đang bán
+
+**AI Agent Thuê Bao** — trợ lý AI bán hàng 24/7 cho shop online.
+
+Khách hàng của bạn là các chủ shop (bán quần áo, mỹ phẩm, đồ điện tử, thực phẩm,...). Họ mua gói thuê bao hàng tháng để có AI trả lời tin nhắn khách tự động.
+
+### 3 gói bán
+
+| Gói | Giá bán | Giá vốn* | Lợi nhuận/tháng | AI Model |
+|---|---|---|---|---|
+| Basic | 99.000đ | 0đ (Gemini free tier) | 99.000đ | Gemini |
+| Pro | 199.000đ | ~20.000đ (Claude API) | 179.000đ | Claude |
+| Business | 499.000đ | ~50.000đ (GPT-4 API) | 449.000đ | GPT-4 |
+
+*Giá vốn = chi phí API AI, phụ thuộc vào dung lượng sử dụng thực tế.
+
+### Đối tượng khách hàng
+
+- Chủ shop bán hàng trên Facebook / Zalo / website
+- Có nhóm Telegram riêng cho khách
+- Muốn có AI trả lời 24/7 thay vì thuê nhân viên (5-10 triệu/tháng)
+- Có catalog sản phẩm (file Excel/CSV) để AI tra cứu
+
+---
+
+## 2. Cài đặt cho khách mới
+
+Khi khách thanh toán và muốn dùng AI Agent, làm theo các bước sau:
+
+### Bước 1: Kích hoạt thuê bao
+
+Trên Telegram, chat với bot với tư cách admin → gõ `/confirm TXNxxxxx` (với mã đơn của khách). Bot sẽ tự động:
+- Kích hoạt gói thuê bao
+- Gửi tin nhắn chào mừng + hướng dẫn onboarding cho khách
+
+### Bước 2: Onboarding (khách tự làm)
+
+Khách làm theo 6 bước bot hướng dẫn:
+1. **Tên shop** — nhập tên shop
+2. **Ngành hàng** — chọn từ danh sách (thời trang, mỹ phẩm, đồ điện tử,...)
+3. **Giọng văn** — chọn chuyên nghiệp / thân thiện / hài hước
+4. **Mô tả sản phẩm** — paste mô tả ngắn
+5. **Khách hàng mục tiêu** — ai sẽ mua hàng
+6. **FAQ** — các câu hỏi thường gặp
+
+Sau bước 6 → hoàn tất. Khách có thể chat với AI ngay.
+
+### Bước 3: Upload catalog
+
+Khách gửi file Excel (`.xlsx`) hoặc CSV chứa danh sách sản phẩm. Bot tự động import.
+
+**Cấu trúc file Excel/CSV khuyến nghị:**
+
+| name | sku | price | category | stock | description |
+|---|---|---|---|---|---|
+| Áo thun trắng | AT001 | 99000 | Thời trang | 50 | Áo cotton 100% |
+
+### Bước 4: Hướng dẫn khách các lệnh cơ bản
+
+Bảo khách gõ `/start` để xem menu đầy đủ. Các lệnh quan trọng:
+- `/agent` — Dashboard quản lý
+- `/webwidget` — Lấy mã nhúng widget website
+- `/catalog` — Upload file sản phẩm
+- `/mygroups` — Xem nhóm đã thêm bot
+- `/renew` — Gia hạn thuê bao
+
+---
+
+## 3. Admin operations (bạn — chủ sản phẩm)
+
+### 3.1 Telegram commands
+
+| Lệnh | Mô tả |
+|---|---|
+| `/confirm TXNxxx` | Xác nhận đơn thanh toán + kích hoạt thuê bao |
+| `/set_link sku url` | Cập nhật link tải sản phẩm (cho các gói mua 1 lần) |
+| `/admin_today` | Doanh số hôm nay |
+| `/unmatched` | Giao dịch Sepay không khớp |
+| `/sale_stats` | Thống kê doanh số |
+| `/backup` | Chạy backup thủ công |
+| `/admin_help` | Danh sách lệnh admin đầy đủ |
+| `/broadcast Nội dung` | Gửi tin cho toàn bộ khách đã chat |
+
+### 3.2 Web Admin Dashboard
+
+Mở `{BASE_URL}/admin` → đăng nhập bằng `ADMIN_PASSWORD`:
+
+- **Tổng quan**: số thuê bao active, shop đã onboard, tổng đơn, đơn chờ, GD không khớp
+- **Đơn hàng**: danh sách 100 đơn gần nhất (pending/paid/expired)
+- **GD không khớp**: giao dịch Sepay không tìm thấy đơn
+
+### 3.3 Xử lý đơn thủ công
+
+Khi khách chuyển khoản nhưng bot không tự động gửi link (Sepay manual mode):
+
+```bash
+/confirm {MÃ ĐƠN}
+```
+
+Ví dụ: khách báo đã chuyển 199.000đ cho gói Pro → tìm mã đơn → `/confirm TXNabc123`
+
+### 3.4 Backup
+
+Backup tự động mỗi ngày qua Railway Cronjob: `GET /cron/backup`
+
+Hoặc thủ công: `/backup` trên Telegram.
+
+File backup được gửi vào Telegram admin chat.
+
+---
+
+## 4. Vận hành hàng ngày
+
+### Sáng
+- Kiểm tra `/admin` dashboard → có đơn chờ xử lý không
+- Kiểm tra log Railway (Deploy Logs) → có exception không
+
+### Tuần
+- Kiểm tra `/unmatched` — có GD Sepay không khớp không
+- Xem số dư API key (Gemini, Claude, OpenAI) → add credit kịp thời
+
+### Tháng
+- Export báo cáo doanh thu từ DB
+- Gia hạn / xử lý khách hết hạn (bot tự động nhắc 7 ngày trước)
+
+---
+
+## 5. Troubleshooting thường gặp
+
+| Vấn đề | Cách xử lý |
+|---|---|
+| Bot không phản hồi | Kiểm tra `getWebhookInfo` → webhook có đúng URL không. Restart Railway. |
+| Khách không nhận được widget | Kiểm tra shop đã hoàn thành onboarding chưa. Kiểm tra web token. |
+| AI trả lời sai / không đúng | Dạy AI bằng 👍👎 trên mỗi câu trả lời. |
+| Khách hết tin nhắn trong ngày | Bot tự báo. Khách nâng cấp gói hoặc đợi nửa đêm reset. |
+| Sepay không báo GD | Manual mode: tự `/confirm`. Automatic: kiểm tra Sepay webhook log. |
+
+---
+
+## 6. Mở rộng
+
+Khi có nhiều khách (>50), cân nhắc:
+- Chuyển PostgreSQL (thay `DATABASE_URL`)
+- Scale Railway lên `--workers 4 --threads 8`
+- Thêm Redis cho rate limiter + session (multi-worker)
+- Upgrade Sepay lên gói trả phí nếu vượt 100 GD/tháng
+
+---
+
+*AI Agent Thuê Bao v3.0 · Dành cho chủ sản phẩm · 26/05/2026*

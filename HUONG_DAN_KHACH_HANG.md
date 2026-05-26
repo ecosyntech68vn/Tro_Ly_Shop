@@ -1,0 +1,232 @@
+# Hướng dẫn sử dụng — AI Agent cho Shop Online
+
+Cảm ơn bạn đã mua **AI Agent Thuê Bao**! Trợ lý AI này sẽ giúp bạn trả lời tin nhắn khách hàng tự động 24/7, tạo đơn hàng, đặt lịch hẹn — ngay trong Telegram.
+
+---
+
+## 1. Bắt đầu
+
+### 1.1 Kích hoạt
+
+Sau khi thanh toán, admin sẽ kích hoạt gói cho bạn. Bạn sẽ nhận được tin nhắn từ bot:
+
+```
+✅ Đã nhận thanh toán 199.000đ cho đơn #TXNabc123.
+Gói: AI Agent Pro
+AI Agent của bạn đã sẵn sàng! Hãy cài đặt thông tin shop.
+```
+
+### 1.2 Cài đặt thông tin shop (Onboarding)
+
+Bot sẽ hỏi lần lượt 6 bước. Gõ câu trả lời cho từng bước:
+
+| Bước | Câu hỏi | Ví dụ trả lời |
+|---|---|---|
+| 1 | Tên shop là gì? | `Anna Fashion` |
+| 2 | Ngành hàng? (chọn số) | `1` (Thời trang) |
+| 3 | Giọng văn? (chọn số) | `2` (Thân thiện) |
+| 4 | Mô tả sản phẩm? | `Chuyên áo thun cotton, quần jeans, phụ kiện thời trang nữ` |
+| 5 | Khách hàng mục tiêu? | `Nữ 18-35 tuổi, yêu thích thời trang Hàn Quốc` |
+| 6 | Câu hỏi thường gặp? | `Có ship toàn quốc không? Giá có bao gồm ship không?` |
+
+Sau bước 6 → **Hoàn tất!** Giờ bạn có thể chat với AI Agent.
+
+> 💡 **Mẹo:** Bạn có thể cập nhật thông tin này sau qua Dashboard web.
+
+---
+
+## 2. Chat với AI Agent
+
+### Chat cá nhân
+
+Chỉ cần gõ tin nhắn bất kỳ — bot sẽ trả lời như trợ lý bán hàng của bạn.
+
+**Ví dụ:**
+- *"Viết bài Facebook bán áo thun trắng"*
+- *"Soạn tin nhắn trả lời khách hỏi giá"*
+- *"Phân tích đối thủ cạnh tranh"*
+
+### Chat trong nhóm Telegram
+
+1. Thêm bot `@TroLyAIThucChien_bot` vào nhóm của bạn
+2. Gõ `/claim` trong nhóm để xác nhận quyền sở hữu
+3. Bot tự động trả lời khi:
+   - Có người @bot (chế độ **Mention**)
+   - Có câu hỏi được detect (chế độ **Smart** — khuyến nghị)
+   - Mọi tin nhắn (chế độ **Auto**)
+
+**Đổi chế độ:**
+```
+/mode smart    → Tự động detect câu hỏi (khuyến nghị)
+/mode mention  → Chỉ trả lời khi @bot
+/mode auto     → Trả lời tất cả
+```
+
+Xem danh sách nhóm: `/mygroups`
+
+---
+
+## 3. Upload danh sách sản phẩm
+
+Gửi file Excel (`.xlsx`) hoặc CSV vào chat với bot.
+
+**File mẫu:**
+
+| name | sku | price | category | stock | description |
+|---|---|---|---|---|---|
+| Áo thun trắng | AT001 | 99000 | Thời trang | 50 | Áo cotton 100% cao cấp |
+| Quần jeans | QJ001 | 199000 | Thời trang | 30 | Quần jeans ống rộng |
+
+> Cột `name` là bắt buộc. Các cột khác không bắt buộc.
+> File tối đa 10MB.
+
+Sau khi upload, AI sẽ tự động tra cứu sản phẩm khi khách hỏi. Ví dụ:
+- *"Áo thun trắng còn không?"* → AI trả lời giá + tồn kho
+- *"Có áo size L không?"* → AI kiểm tra trong catalog
+
+---
+
+## 4. Website Widget
+
+Bạn có thể nhúng AI Agent vào website để khách chat trực tiếp.
+
+### Lấy mã nhúng
+
+Gõ `/webwidget` → bot gửi mã HTML. Copy-paste vào website của bạn:
+
+```html
+<script src="https://BOT-DOMAIN/widget.js" data-token="TOKEN_CUA_BAN"></script>
+```
+
+### Giao diện widget
+
+- Icon chat nổi góc dưới bên phải
+- Click → mở cửa sổ chat
+- Khách gõ tin nhắn → AI trả lời
+- Zero dependency, không cần thư viện
+
+### Reset token (nếu cần)
+
+Gõ `/webwidget_reset` → bot tạo token mới. Cập nhật lại trong website.
+
+---
+
+## 5. Dashboard Web
+
+Mở trình duyệt → vào `{BASE_URL}/dashboard` → đăng nhập bằng **web token** (lấy từ lệnh `/webwidget`).
+
+### Các trang
+
+| Trang | Xem được |
+|---|---|
+| **Tổng quan** | Số nhóm, sản phẩm, câu đã sửa, tin nhắn hôm nay, biểu đồ 7 ngày |
+| **Hội thoại** | 100 tin nhắn gần nhất |
+| **Sửa lỗi** | Các câu đã dạy AI — có nút xoá |
+| **Sản phẩm** | Danh sách sản phẩm đã import — có nút xoá |
+| **Đơn hàng** | Đơn khách đã đặt — nút xác nhận / giao hàng / đã giao |
+| **Lịch hẹn** | Lịch hẹn khách đã đặt — nút xác nhận / đã xong |
+| **Gửi tin** | Gửi thông báo tới tất cả khách đã chat |
+| **Xuất CSV** | Xuất hội thoại, sửa lỗi, sản phẩm |
+
+---
+
+## 6. Đặt hàng + Đặt lịch qua AI
+
+### Khách muốn mua hàng
+
+Khi khách chat và muốn đặt hàng (ví dụ: *"đặt 2 áo thun trắng"*), AI sẽ:
+1. Hỏi thông tin: số lượng, tên, SĐT, địa chỉ
+2. Xác nhận đơn hàng với khách
+3. Tạo đơn → gửi thông báo cho bạn trên Telegram
+4. Bạn nhận được nút ✅ Xác nhận / ❌ Huỷ ngay trong Telegram
+
+Xem đơn hàng: Dashboard → Đơn hàng, hoặc gõ `/donhang`
+
+### Khách muốn đặt lịch
+
+Khi khách muốn đặt lịch hẹn (ví dụ: *"đặt lịch cắt tóc ngày mai"*), AI sẽ:
+1. Hỏi thông tin: tên, SĐT, dịch vụ, ngày, giờ
+2. Xác nhận với khách
+3. Tạo lịch hẹn → gửi thông báo cho bạn
+
+Xem lịch hẹn: Dashboard → Lịch hẹn, hoặc gõ `/lichhen`
+
+---
+
+## 7. Dạy AI trả lời đúng hơn
+
+Bên dưới mỗi câu trả lời của AI có 2 nút: **👍** và **👎**
+
+- **👍** — Câu trả lời đúng. AI sẽ nhớ và làm tốt hơn
+- **👎** — Câu trả lời sai. Bot sẽ hỏi bạn câu đúng là gì. Bạn gõ câu đúng → AI ghi nhớ vĩnh viễn
+
+Mỗi lần gặp câu hỏi tương tự, AI sẽ dùng câu bạn đã sửa — không cần gọi API AI lần nữa (tiết kiệm chi phí + trả lời nhanh hơn).
+
+Xem danh sách đã sửa: Dashboard → Sửa lỗi, hoặc gõ `/corrections`
+
+---
+
+## 8. Gia hạn
+
+Bot sẽ tự động nhắc bạn khi thuê bao sắp hết hạn (còn 7 ngày).
+
+Để gia hạn chủ động: gõ `/renew` → bot gửi QR thanh toán.
+
+Sau khi chuyển khoản, admin xác nhận → thuê bao được gia hạn thêm 30 ngày.
+
+---
+
+## 9. Lệnh Telegram đầy đủ
+
+| Lệnh | Mô tả |
+|---|---|
+| `/start` | Menu chính |
+| `/agent` | Dashboard thuê bao |
+| `/chat` | Chat với AI |
+| `/renew` | Gia hạn thuê bao |
+| `/mygroups` | Danh sách nhóm đã thêm bot |
+| `/webwidget` | Lấy mã nhúng widget website |
+| `/webwidget_reset` | Tạo token web mới |
+| `/catalog` | Upload file sản phẩm |
+| `/corrections` | Xem số câu đã sửa |
+| `/donhang` | Xem đơn hàng gần đây |
+| `/lichhen` | Xem lịch hẹn gần đây |
+| `/mode set` | Đổi chế độ group |
+| `/trang_thai` | Xem trạng thái đơn mua sản phẩm |
+| `/lien_he` | Liên hệ hỗ trợ |
+
+---
+
+## 10. Giới hạn gói
+
+| Gói | Tin nhắn/ngày | AI Model | Số Agent |
+|---|---|---|---|
+| Basic | 30 | Gemini | 1 |
+| Pro | 100 | Claude | 3 |
+| Business | 500 | GPT-4 | Không giới hạn |
+
+Hết tin nhắn trong ngày → bot báo và reset vào nửa đêm.
+Nâng cấp gói: gõ `/start` → chọn gói mới.
+
+---
+
+## FAQ
+
+**H: AI có hiểu tiếng Anh không?**
+Có. AI tự động detect ngôn ngữ — khách nói tiếng Anh → trả lời tiếng Anh.
+
+**H: Làm sao để AI biết sản phẩm của tôi?**
+Upload file Excel/CSV danh sách sản phẩm (xem mục 3).
+
+**H: AI trả lời sai thì làm sao?**
+Bấm 👎 dưới câu trả lời → gõ câu đúng → AI nhớ mãi (xem mục 7).
+
+**H: Có bao nhiêu nhóm được?**
+Basic: 1 Agent (1 nhóm). Pro: 3 Agent. Business: không giới hạn.
+
+**H: Làm sao để hỗ trợ khách hàng tốt hơn?**
+Cập nhật FAQ trong onboarding (bước 6). Upload catalog đầy đủ. Dạy AI qua 👎 thường xuyên.
+
+---
+
+*AI Agent Thuê Bao v3.0 · Dành cho khách hàng · 26/05/2026 · Hỗ trợ: /lien_he*
