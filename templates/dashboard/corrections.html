@@ -1,0 +1,23 @@
+{% extends "dashboard/layout.html" %}
+{% block content %}
+<div class="header"><h1>📚 Câu đã sửa lỗi</h1><p>Bot tự động dùng các câu này khi gặp câu hỏi tương tự</p></div>
+
+{% if corrections %}
+<table><tr><th>Câu hỏi gốc</th><th>Câu trả lời đúng</th><th>Hành động</th></tr>
+{% for c in corrections %}
+<tr>
+  <td class="msg">{{ c.question }}</td>
+  <td class="msg">{{ c.answer }}</td>
+  <td>
+    <form method="POST" action="/dashboard/corrections/delete" style="all:unset;display:inline">
+      <input type="hidden" name="id" value="{{ c.id }}">
+      <button class="btn btn-danger btn-sm" onclick="return confirm('Xóa?')">Xóa</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</table>
+{% else %}
+<div class="empty">Chưa có câu sửa lỗi nào</div>
+{% endif %}
+{% endblock %}

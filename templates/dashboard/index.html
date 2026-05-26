@@ -1,0 +1,24 @@
+{% extends "dashboard/layout.html" %}
+{% block content %}
+<div class="header"><h1>📊 Tổng quan</h1><p>Shop ID: <code>{{ chat_id }}</code></p></div>
+
+<div class="cards">
+  <div class="card"><div class="num">{{ stats.groups }}</div><div class="label">Nhóm đang hoạt động</div></div>
+  <div class="card"><div class="num">{{ stats.products }}</div><div class="label">Sản phẩm trong catalog</div></div>
+  <div class="card"><div class="num">{{ stats.corrections }}</div><div class="label">Câu đã sửa lỗi</div></div>
+  <div class="card"><div class="num">{{ stats.subscription }}</div><div class="label">Gói thuê bao</div></div>
+  <div class="card"><div class="num">{{ stats.chats_today }}</div><div class="label">Hội thoại hôm nay</div></div>
+  <div class="card"><div class="num">{{ stats.mode }}</div><div class="label">Chế độ group</div></div>
+</div>
+
+<div class="header" style="margin-top:8px"><h2>💬 Hội thoại gần đây</h2></div>
+{% if recent %}
+<table><tr><th>Khách</th><th>Tin nhắn cuối</th><th>Lúc</th></tr>
+{% for r in recent %}
+<tr><td><code>{{ r.customer }}</code></td><td class="msg">{{ r.last_msg }}</td><td style="white-space:nowrap">{{ r.last_time }}</td></tr>
+{% endfor %}
+</table>
+{% else %}
+<div class="empty">Chưa có hội thoại nào</div>
+{% endif %}
+{% endblock %}

@@ -16,12 +16,12 @@ import io
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
-from flask import Flask, request, jsonify, abort, send_file
+from flask import Flask, request, jsonify, abort, send_file, session, redirect, url_for, render_template
 import requests
 
 from config import (
     BOT_TOKEN, SEPAY_API_KEY, BANK_ACCOUNT, BANK_NAME, BANK_OWNER,
-    ADMIN_CHAT_ID, PRODUCTS, BASE_URL,
+    ADMIN_CHAT_ID, PRODUCTS, BASE_URL, SECRET_KEY,
     GEMINI_API_KEY, CLAUDE_API_KEY, OPENAI_API_KEY
 )
 from db import (
@@ -52,6 +52,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.secret_key = SECRET_KEY
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 BOT_USERNAME = "TroLyAIThucChien_bot"
 BOT_ID = None  # resolved at runtime from first my_chat_member
@@ -1430,6 +1431,117 @@ def handle_admin_callback(chat_id, data):
 # ============================================================
 # FLASK ROUTES
 # ============================================================
+
+def _dash_auth():
+    d = session.get('_dash')
+    if not d:
+        return None
+    return d.get('chat_id')
+
+@app.route("/dashboard/login", methods=["GET", "POST"])
+def dashboard_login():
+    if request.method == "POST":
+        token = (request.form.get("token") or "").strip()
+        if not token:
+            return render_template("dashboard/login.html", error="Vui lòng nhập token")
+        row = query_db("SELECT chat_id FROM agent_profiles WHERE web_token = ?", (token,), one=True)
+        if not row:
+            return render_template("dashboard/login.html", error="Token không hợp lệ")
+        session['_dash'] = {'chat_id': row['chat_id']}
+        session.permanent = True
+        return redirect(url_for('dashboard_index'))
+    return render_template("dashboard/login.html")
+
+@app.route("/dashboard/logout")
+def dashboard_logout():
+    session.pop('_dash', None)
+    return redirect(url_for('dashboard_login'))
+
+@app.route("/dashboard")
+def dashboard_index():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    sub = query_db("SELECT plan FROM agent_subscriptions WHERE chat_id=? AND status='active'", (cid,), one=True)
+    plan = AGENT_PLANS.get(sub['plan'], {}).get('name', sub['plan']) if sub else "Chưa đăng ký"
+    grps = query_db("SELECT COUNT(*) as n FROM agent_groups WHERE owner_chat_id=?", (cid,), one=True)
+    prods = query_db("SELECT COUNT(*) as n FROM agent_products WHERE owner_chat_id=?", (cid,), one=True)
+    corr = query_db("SELECT COUNT(*) as n FROM agent_learned WHERE owner_chat_id=?", (cid,), one=True)
+    prof = query_db("SELECT group_chat_mode FROM agent_profiles WHERE chat_id=?", (cid,), one=True)
+    mode = (prof or {}).get('group_chat_mode', 'mention')
+    mode_label = {'mention': 'Mention', 'smart': 'Smart', 'auto': 'Auto'}
+    today = query_db("SELECT COUNT(DISTINCT customer_id) as n FROM agent_chat_history WHERE owner_chat_id=? AND date(created_at)=date('now')", (cid,), one=True)
+    recent = query_db(
+        "SELECT customer_id as customer, substr(bot_msg,1,80) as last_msg, max(created_at) as last_time"
+        " FROM agent_chat_history WHERE owner_chat_id=? GROUP BY customer_id"
+        " ORDER BY last_time DESC LIMIT 10", (cid,)
+    )
+    stats = dict(
+        groups=grps['n'] if grps else 0,
+        products=prods['n'] if prods else 0,
+        corrections=corr['n'] if corr else 0,
+        subscription=plan,
+        chats_today=today['n'] if today else 0,
+        mode=mode_label.get(mode, mode),
+    )
+    return render_template("dashboard/index.html", chat_id=cid, stats=stats, recent=recent or [])
+
+@app.route("/dashboard/chats")
+def dashboard_chats():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    rows = query_db(
+        "SELECT customer_id as customer, group_id, substr(user_msg,1,80) as user_msg, substr(bot_msg,1,80) as bot_msg, created_at as ts"
+        " FROM agent_chat_history WHERE owner_chat_id=? ORDER BY created_at DESC LIMIT 100", (cid,)
+    )
+    return render_template("dashboard/chats.html", chats=rows or [])
+
+@app.route("/dashboard/corrections")
+def dashboard_corrections():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    rows = query_db(
+        "SELECT id, substr(question,1,100) as question, substr(answer,1,100) as answer"
+        " FROM agent_learned WHERE owner_chat_id=? ORDER BY id DESC LIMIT 100", (cid,)
+    )
+    return render_template("dashboard/corrections.html", corrections=rows or [])
+
+@app.route("/dashboard/corrections/delete", methods=["POST"])
+def dashboard_corrections_delete():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    rid = request.form.get("id", "")
+    if rid:
+        db = get_db()
+        db.execute("DELETE FROM agent_learned WHERE id=? AND owner_chat_id=?", (rid, cid))
+        db.commit()
+    return redirect(url_for('dashboard_corrections'))
+
+@app.route("/dashboard/catalog")
+def dashboard_catalog():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    rows = query_db(
+        "SELECT id, name, price, substr(description,1,100) as desc FROM agent_products WHERE owner_chat_id=? ORDER BY id DESC LIMIT 100", (cid,)
+    )
+    return render_template("dashboard/catalog.html", products=rows or [])
+
+@app.route("/dashboard/catalog/delete", methods=["POST"])
+def dashboard_catalog_delete():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    pid = request.form.get("id", "")
+    if pid:
+        db = get_db()
+        db.execute("DELETE FROM agent_products WHERE id=? AND owner_chat_id=?", (pid, cid))
+        db.commit()
+    return redirect(url_for('dashboard_catalog'))
+
 
 @app.route("/", methods=["GET"])
 def health():

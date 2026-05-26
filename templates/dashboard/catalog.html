@@ -1,0 +1,24 @@
+{% extends "dashboard/layout.html" %}
+{% block content %}
+<div class="header"><h1>📦 Sản phẩm</h1><p>Catalog do shop upload</p></div>
+
+{% if products %}
+<table><tr><th>Tên sản phẩm</th><th>Giá</th><th>Mô tả</th><th>Hành động</th></tr>
+{% for p in products %}
+<tr>
+  <td>{{ p.name }}</td>
+  <td>{% if p.price %}{{ p.price | int }}đ{% else %}—{% endif %}</td>
+  <td class="msg">{{ p.desc }}</td>
+  <td>
+    <form method="POST" action="/dashboard/catalog/delete" style="all:unset;display:inline">
+      <input type="hidden" name="id" value="{{ p.id }}">
+      <button class="btn btn-danger btn-sm" onclick="return confirm('Xóa?')">Xóa</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</table>
+{% else %}
+<div class="empty">Chưa có sản phẩm. Upload file CSV/Excel trong Telegram bot.</div>
+{% endif %}
+{% endblock %}

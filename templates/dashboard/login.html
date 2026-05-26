@@ -1,0 +1,12 @@
+{% extends "dashboard/layout.html" %}
+{% block content %}
+<form method="POST">
+<h2>🔐 Đăng nhập Dashboard</h2>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+<input type="text" name="token" placeholder="Web Token" required>
+<button type="submit" class="btn btn-primary" style="width:100%">Đăng nhập</button>
+<div class="text-center mt-4" style="font-size:13px;color:#999">
+Chưa có token? Gõ <strong>/webwidget</strong> trong Telegram bot
+</div>
+</form>
+{% endblock %}

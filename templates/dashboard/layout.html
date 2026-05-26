@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard - AI Agent</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f0f2f5;display:flex;min-height:100vh}
+.sidebar{width:240px;background:#1a1a2e;color:#fff;padding:24px 0;flex-shrink:0}
+.sidebar h2{padding:0 20px 24px;font-size:18px;border-bottom:1px solid #2a2a4e}
+.sidebar nav{margin-top:16px}
+.sidebar a{display:flex;align-items:center;padding:12px 20px;color:#ccc;text-decoration:none;font-size:14px;gap:10px}
+.sidebar a:hover,.sidebar a.active{background:#2a2a4e;color:#fff}
+.sidebar .logout{margin-top:auto;border-top:1px solid #2a2a4e;padding-top:16px}
+.main{flex:1;padding:32px;overflow-y:auto}
+.header{margin-bottom:28px}
+.header h1{font-size:24px;color:#1a1a2e}
+.header p{color:#666;font-size:14px;margin-top:4px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:32px}
+.card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.card .num{font-size:28px;font-weight:700;color:#1a1a2e}
+.card .label{font-size:13px;color:#888;margin-top:4px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+th,td{padding:12px 16px;text-align:left;font-size:14px}
+th{background:#f8f9fa;color:#666;font-weight:600}
+tr{border-bottom:1px solid #f0f0f0}
+tr:last-child{border:0}
+.msg{max-height:60px;overflow:hidden;color:#555}
+.badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:500}
+.badge-green{background:#e8f5e9;color:#2e7d32}
+.badge-red{background:#fbe9e7;color:#c62828}
+.badge-yellow{background:#fff8e1;color:#f57f17}
+.btn{display:inline-block;padding:8px 20px;border-radius:8px;border:0;font-size:14px;cursor:pointer;text-decoration:none}
+.btn-primary{background:#0088cc;color:#fff}
+.btn-primary:hover{background:#0070aa}
+.btn-danger{background:#e53935;color:#fff}
+.btn-sm{padding:4px 12px;font-size:12px}
+form{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.06);max-width:400px;margin:60px auto}
+form h2{margin-bottom:20px;font-size:20px}
+form input{width:100%;padding:10px 14px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:16px}
+form input:focus{border-color:#0088cc;outline:0}
+.error{color:#e53935;font-size:13px;margin-bottom:12px}
+.text-center{text-align:center}
+.mt-4{margin-top:16px}
+.empty{padding:40px;text-align:center;color:#999}
+</style>
+</head>
+<body>
+{% if session.get('_dash') %}
+<div class="sidebar">
+<h2>🤖 AI Agent</h2>
+<nav>
+<a href="/dashboard" class="{% if request.path == '/dashboard' %}active{% endif %}">📊 Tổng quan</a>
+<a href="/dashboard/chats" class="{% if request.path == '/dashboard/chats' %}active{% endif %}">💬 Hội thoại</a>
+<a href="/dashboard/corrections" class="{% if request.path == '/dashboard/corrections' %}active{% endif %}">📚 Sửa lỗi</a>
+<a href="/dashboard/catalog" class="{% if request.path == '/dashboard/catalog' %}active{% endif %}">📦 Sản phẩm</a>
+<div class="logout"><a href="/dashboard/logout">🚪 Đăng xuất</a></div>
+</nav>
+</div>
+{% endif %}
+<div class="main">
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>
