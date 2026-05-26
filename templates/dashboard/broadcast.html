@@ -1,0 +1,25 @@
+{% extends "dashboard/layout.html" %}
+{% block content %}
+<div class="header">
+  <h1>📢 Gửi tin hàng loạt</h1>
+  <p>Gửi thông báo tới tất cả khách đã từng chat với shop</p>
+</div>
+
+{% if done %}
+<div class="card" style="max-width:600px;margin:0 auto;text-align:center">
+  <div class="num">✅ Đã gửi</div>
+  <p style="margin:16px 0;font-size:16px">
+    Gửi thành công: <strong>{{ sent }}</strong> khách<br>
+    Thất bại: <strong>{{ failed }}</strong>
+  </p>
+  <a href="/dashboard/broadcast" class="btn btn-primary">Gửi tiếp</a>
+</div>
+{% else %}
+<form method="POST">
+  <h2>📢 Soạn tin nhắn</h2>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <textarea name="message" rows="6" style="width:100%;padding:10px 14px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:16px;font-family:inherit" placeholder="Nhập nội dung tin nhắn..."></textarea>
+  <button type="submit" class="btn btn-primary" style="width:100%">📤 Gửi tới tất cả khách</button>
+</form>
+{% endif %}
+{% endblock %}

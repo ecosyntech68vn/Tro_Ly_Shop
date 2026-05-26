@@ -20,7 +20,7 @@ import threading
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
-from flask import Flask, request, jsonify, abort, send_file, session, redirect, url_for, render_template
+from flask import Flask, request, jsonify, abort, send_file, session, redirect, url_for, render_template, Response
 import requests
 
 from config import (
@@ -1760,10 +1760,23 @@ def dashboard_index():
             " FROM agent_chats WHERE owner_chat_id=? GROUP BY customer_id"
             " ORDER BY last_time DESC LIMIT 10", (cid,)
         ).fetchall()
+        # T3.1 Analytics
+        chats_7d = c.execute(
+            "SELECT date(created_at) as d, COUNT(*) as cnt FROM agent_chats"
+            " WHERE owner_chat_id=? AND created_at >= datetime('now','-7 days')"
+            " GROUP BY d ORDER BY d", (cid,)
+        ).fetchall()
+        top_products = c.execute(
+            "SELECT substr(message,1,60) as msg, COUNT(*) as cnt FROM agent_chats"
+            " WHERE owner_chat_id=? AND role='user' AND message LIKE '%mua%' OR message LIKE '%đặt%'"
+            " GROUP BY msg ORDER BY cnt DESC LIMIT 5", (cid,)
+        ).fetchall()
     plan = AGENT_PLANS.get(sub['plan'], {}).get('name', sub['plan']) if sub else "Chưa đăng ký"
     mode = mode_row['mode'] if mode_row else 'mention'
     mode_label = {'mention': 'Mention', 'smart': 'Smart', 'auto': 'Auto'}
     order_stats = get_order_stats(cid)
+    chats_7d_list = [dict(r) for r in chats_7d]
+    top_prods_list = [dict(r) for r in top_products]
     stats = dict(
         groups=grps['n'] if grps and grps['n'] else 0,
         products=prods['n'] if prods and prods['n'] else 0,
@@ -1773,7 +1786,8 @@ def dashboard_index():
         mode=mode_label.get(mode, mode),
         orders_pending=order_stats.get("pending", 0),
     )
-    return render_template("dashboard/index.html", chat_id=cid, stats=stats, recent=recent or [])
+    return render_template("dashboard/index.html", chat_id=cid, stats=stats, recent=recent or [],
+                           chats_7d=chats_7d_list, top_products=top_prods_list)
 
 @app.route("/dashboard/chats")
 def dashboard_chats():
@@ -1876,6 +1890,107 @@ def dashboard_catalog_delete():
         with db_conn() as c:
             c.execute("DELETE FROM agent_products WHERE id=? AND owner_chat_id=?", (pid, cid))
     return redirect(url_for('dashboard_catalog'))
+
+
+# ========== T3.2 — EXPORT ==========
+
+@app.route("/dashboard/export/chats")
+def dashboard_export_chats():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    with db_conn() as c:
+        rows = c.execute(
+            "SELECT created_at, customer_id, role, message, model_used FROM agent_chats"
+            " WHERE owner_chat_id=? ORDER BY created_at DESC LIMIT 5000", (cid,)
+        ).fetchall()
+    out = "Thời gian,Khách,Vai trò,Tin nhắn,Model\n"
+    for r in rows:
+        msg = (r["message"] or "").replace('"', '""')
+        out += f'{r["created_at"]},{r["customer_id"]},{r["role"]},"{msg}",{r["model_used"] or ""}\n'
+    return Response(out, mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=chats.csv"})
+
+@app.route("/dashboard/export/corrections")
+def dashboard_export_corrections():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    with db_conn() as c:
+        rows = c.execute(
+            "SELECT created_at, question, answer FROM agent_learned"
+            " WHERE owner_chat_id=? ORDER BY id DESC", (cid,)
+        ).fetchall()
+    out = "Thời gian,Câu hỏi,Câu trả lời\n"
+    for r in rows:
+        q = (r["question"] or "").replace('"', '""')
+        a = (r["answer"] or "").replace('"', '""')
+        out += f'{r["created_at"]},"{q}","{a}"\n'
+    return Response(out, mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=corrections.csv"})
+
+@app.route("/dashboard/export/products")
+def dashboard_export_products():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    with db_conn() as c:
+        rows = c.execute(
+            "SELECT name, sku, price, category, stock, description, created_at"
+            " FROM agent_products WHERE owner_chat_id=? ORDER BY id DESC", (cid,)
+        ).fetchall()
+    out = "Tên,SKU,Giá,Danh mục,Tồn kho,Mô tả,Ngày tạo\n"
+    for r in rows:
+        for col in ("name", "sku", "category", "description"):
+            val = r[col] or ""
+            r[col] = val.replace('"', '""')
+        out += f'{r["name"]},{r["sku"]},{r["price"]},{r["category"]},{r["stock"]},"{r["description"]}",{r["created_at"]}\n'
+    return Response(out, mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=products.csv"})
+
+
+# ========== T3.4 — BROADCAST ==========
+
+@app.route("/dashboard/broadcast", methods=["GET", "POST"])
+def dashboard_broadcast():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    if request.method == "POST":
+        msg = (request.form.get("message") or "").strip()
+        if not msg:
+            return render_template("dashboard/broadcast.html", error="Vui lòng nhập nội dung")
+        profile = get_shop_profile(cid)
+        shop_name = profile.get("shop_name", "Shop") if profile else "Shop"
+        with db_conn() as c:
+            customers = c.execute(
+                "SELECT DISTINCT customer_id FROM agent_chats"
+                " WHERE owner_chat_id=? AND customer_id != 'owner'", (cid,)
+            ).fetchall()
+        sent = 0
+        failed = 0
+        for row in customers:
+            cust_id = row["customer_id"]
+            try:
+                tg_send(cust_id, f"📢 *{shop_name}*\n\n{msg}")
+                sent += 1
+            except Exception:
+                failed += 1
+        return render_template("dashboard/broadcast.html",
+                               done=True, sent=sent, failed=failed, shop_name=shop_name)
+    return render_template("dashboard/broadcast.html")
+
+
+# ========== T3.3 — BACKUP CRON ==========
+
+@app.route("/cron/backup")
+def cron_backup():
+    """Railway Cronjob endpoint — trigger backup.sh daily."""
+    import subprocess
+    try:
+        r = subprocess.run(["bash", "backup.sh"], capture_output=True, text=True, timeout=120)
+        log.info(f"Backup cron: exit={r.returncode} stdout={r.stdout[:500]} stderr={r.stderr[:200]}")
+        return f"OK exit={r.returncode}", 200
+    except Exception as e:
+        log.exception(f"Backup cron failed: {e}")
+        return f"ERROR: {e}", 500
 
 
 @app.after_request
@@ -2212,6 +2327,33 @@ def telegram_webhook():
             tg_send(chat_id, f"📚 Em đã ghi nhớ *{count} câu* đã được anh sửa.")
         else:
             tg_send(chat_id, "Chưa có câu sửa nào. Khi em trả lời chưa đúng, anh bấm 👎 để dạy em nhé!")
+    elif text.startswith("/broadcast"):
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            tg_send(chat_id, "Cú pháp: `/broadcast <nội dung>` — gửi tin tới tất cả khách đã chat")
+        else:
+            msg = parts[1].strip()
+            with db_conn() as c:
+                customers = c.execute(
+                    "SELECT DISTINCT customer_id FROM agent_chats"
+                    " WHERE owner_chat_id=? AND customer_id != 'owner'", (chat_id,)
+                ).fetchall()
+            sent = 0
+            for row in customers:
+                try:
+                    tg_send(row["customer_id"], f"📢 *{profile.get('shop_name', 'Shop')}*\n\n{msg}")
+                    sent += 1
+                except Exception:
+                    pass
+            tg_send(chat_id, f"✅ Đã gửi tin tới *{sent}* khách hàng.")
+    elif text == "/backup":
+        import subprocess
+        tg_send(chat_id, "⏳ Đang backup...")
+        try:
+            r = subprocess.run(["bash", "backup.sh"], capture_output=True, text=True, timeout=120)
+            tg_send(chat_id, f"✅ Backup hoàn tất (exit={r.returncode})")
+        except Exception as e:
+            tg_send(chat_id, f"❌ Backup lỗi: {e}")
     elif text == "/trang_thai":
         handle_trang_thai(chat_id)
     elif text == "/lien_he":

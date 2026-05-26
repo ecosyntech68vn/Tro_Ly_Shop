@@ -12,7 +12,33 @@
   <div class="card"><div class="num">{{ stats.orders_pending }}</div><div class="label">🛒 Đơn chờ</div></div>
 </div>
 
-<div class="header" style="margin-top:8px"><h2>💬 Hội thoại gần đây</h2></div>
+{% if chats_7d %}
+<div class="header" style="margin-top:8px"><h2>📈 Tin nhắn 7 ngày</h2></div>
+<div style="display:flex;gap:6px;align-items:end;margin-bottom:24px;height:100px;padding:12px;background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+  {% set max_cnt = chats_7d|map(attribute='cnt')|max or 1 %}
+  {% for row in chats_7d %}
+  <div style="flex:1;text-align:center">
+    <div style="font-size:11px;color:#888">{{ row.d[-5:] }}</div>
+    <div style="background:#0088cc;border-radius:4px 4px 0 0;margin:4px auto 0;height:{{ (row.cnt / max_cnt * 80)|int }}px;max-width:40px;min-height:4px"></div>
+    <div style="font-size:12px;font-weight:600">{{ row.cnt }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if top_products %}
+<div class="header"><h2>🏆 Sản phẩm được hỏi nhiều</h2></div>
+<table>
+  <thead><tr><th>Nội dung</th><th>Lượt</th></tr></thead>
+  <tbody>
+  {% for p in top_products %}
+  <tr><td class="msg">{{ p.msg }}</td><td>{{ p.cnt }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<div class="header" style="margin-top:16px"><h2>💬 Hội thoại gần đây</h2></div>
 {% if recent %}
 <table><tr><th>Khách</th><th>Tin nhắn cuối</th><th>Lúc</th></tr>
 {% for r in recent %}

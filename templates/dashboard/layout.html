@@ -57,6 +57,12 @@ form input:focus{border-color:#0088cc;outline:0}
 <a href="/dashboard/catalog" class="{% if request.path == '/dashboard/catalog' %}active{% endif %}">📦 Sản phẩm</a>
 <a href="/dashboard/orders" class="{% if request.path == '/dashboard/orders' %}active{% endif %}">🛒 Đơn hàng</a>
 <a href="/dashboard/appointments" class="{% if request.path == '/dashboard/appointments' %}active{% endif %}">📅 Lịch hẹn</a>
+<a href="/dashboard/broadcast" class="{% if request.path == '/dashboard/broadcast' %}active{% endif %}">📢 Gửi tin</a>
+<div style="border-top:1px solid #2a2a4e;margin-top:8px;padding-top:8px">
+<a href="/dashboard/export/chats">📤 Xuất hội thoại</a>
+<a href="/dashboard/export/corrections">📤 Xuất sửa lỗi</a>
+<a href="/dashboard/export/products">📤 Xuất sản phẩm</a>
+</div>
 <div class="logout"><a href="/dashboard/logout">🚪 Đăng xuất</a></div>
 </nav>
 </div>
