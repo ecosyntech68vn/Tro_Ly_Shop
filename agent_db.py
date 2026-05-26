@@ -119,10 +119,21 @@ def get_group_mode(group_chat_id):
         return row["mode"] if row else "mention"
 
 
+_ABBR = {"bn": "bao nhieu", "ko": "khong", "k": "khong",
+         "dc": "duoc", "vs": "voi", "đc": "duoc",
+         "sp": "san pham", "shop": "shop", "ship": "ship",
+         "ntn": "nhu the nao", "sao": "the nao", "s": "sao",
+         "luon": "luon", "l": "luon", "r": "roi"}
+
+
 def _nd(s):
-    """Remove Vietnamese diacritics for loose matching."""
-    import unicodedata
-    return unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode()
+    """Remove diacritics + strip punctuation + expand common abbreviations."""
+    import unicodedata, re
+    t = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode()
+    t = re.sub(r'[^\w\s]', ' ', t.lower())
+    words = t.split()
+    expanded = [_ABBR.get(w, w) for w in words]
+    return " ".join(expanded)
 
 
 def is_question_message(text):
@@ -246,6 +257,51 @@ def get_product_count(owner_chat_id):
 def clear_products(owner_chat_id):
     with conn() as c:
         c.execute("DELETE FROM agent_products WHERE owner_chat_id=?", (owner_chat_id,))
+
+
+# ========== LEARNED RESPONSES (từ sửa lỗi) ==========
+
+def save_correction(owner_chat_id, question, answer):
+    """Store a corrected answer for a question."""
+    keywords = " ".join(sorted(set(_nd(question).split())))
+    now = datetime.utcnow().isoformat()
+    with conn() as c:
+        c.execute(
+            """INSERT INTO agent_learned(owner_chat_id, keywords, question, answer, created_at)
+               VALUES(?, ?, ?, ?, ?)""",
+            (owner_chat_id, keywords, question, answer, now)
+        )
+
+
+def find_correction_match(owner_chat_id, query, threshold=0.45):
+    """Find a saved correction matching the query by keyword overlap.
+    Returns (question, answer) or None."""
+    query_kw = set(_nd(query).split())
+    if not query_kw:
+        return None
+    with conn() as c:
+        rows = c.execute(
+            "SELECT question, answer, keywords FROM agent_learned WHERE owner_chat_id=?",
+            (owner_chat_id,)
+        ).fetchall()
+    best = None
+    best_score = 0
+    for row in rows:
+        cor_kw = set(row["keywords"].split())
+        overlap = len(query_kw & cor_kw)
+        score = overlap / max(len(query_kw), len(cor_kw))
+        if score > best_score:
+            best_score = score
+            best = (row["question"], row["answer"])
+    return best if best_score >= threshold else None
+
+
+def count_corrections(owner_chat_id):
+    with conn() as c:
+        row = c.execute(
+            "SELECT COUNT(*) FROM agent_learned WHERE owner_chat_id=?", (owner_chat_id,)
+        ).fetchone()
+        return row[0] if row else 0
 
 
 def format_products_text(products):
@@ -436,6 +492,16 @@ def init_agent_tables():
             created_at    TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_agent_products_owner ON agent_products(owner_chat_id);
+
+        CREATE TABLE IF NOT EXISTS agent_learned (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_chat_id INTEGER NOT NULL,
+            keywords      TEXT NOT NULL,
+            question      TEXT NOT NULL,
+            answer        TEXT NOT NULL,
+            created_at    TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_learned_owner ON agent_learned(owner_chat_id);
         """,
         """
         CREATE TABLE IF NOT EXISTS agent_subscriptions (
@@ -505,6 +571,16 @@ def init_agent_tables():
             created_at    TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_agent_products_owner ON agent_products(owner_chat_id);
+
+        CREATE TABLE IF NOT EXISTS agent_learned (
+            id            SERIAL PRIMARY KEY,
+            owner_chat_id BIGINT NOT NULL,
+            keywords      TEXT NOT NULL,
+            question      TEXT NOT NULL,
+            answer        TEXT NOT NULL,
+            created_at    TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_learned_owner ON agent_learned(owner_chat_id);
         """
     )
 

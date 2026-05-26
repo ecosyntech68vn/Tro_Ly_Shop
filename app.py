@@ -42,6 +42,7 @@ from agent_db import (
     is_question_message,
     get_or_create_web_token, get_owner_by_web_token,
     import_products_from_csv, search_products, get_product_count, clear_products,
+    save_correction, find_correction_match, count_corrections,
 )
 
 logging.basicConfig(
@@ -58,6 +59,10 @@ BOT_ID = None  # resolved at runtime from first my_chat_member
 # Thread pool for non-blocking AI calls
 AI_EXECUTOR = ThreadPoolExecutor(max_workers=32)
 HISTORY_LIMIT = 10  # conversation memory depth
+
+# Rating & Correction state
+RATING_STATE = {}  # (chat_id, msg_id) -> {"question": str, "owner_chat_id": int}
+PENDING_CORRECTION = {}  # owner_chat_id -> {"question": str}
 
 # Startup validation
 if not BOT_TOKEN:
@@ -674,10 +679,40 @@ def handle_my_chat_member(update):
         log.info(f"Bot removed from group {chat_id}")
 
 
+def _send_with_rate(chat_id, text, owner_chat_id, question):
+    """Send message with 👍👎 buttons. Returns message_id or None."""
+    payload = {
+        "chat_id": chat_id, "text": text,
+        "parse_mode": "Markdown", "disable_web_page_preview": True,
+        "reply_markup": {
+            "inline_keyboard": [[
+                {"text": "👍", "callback_data": "rate_ok"},
+                {"text": "👎", "callback_data": "rate_bad"},
+            ]]
+        }
+    }
+    r = _tg_call("sendMessage", payload)
+    if r and r.ok:
+        msg_id = r.json().get("result", {}).get("message_id")
+        if msg_id:
+            RATING_STATE[(chat_id, msg_id)] = {"question": question, "owner_chat_id": owner_chat_id}
+        return msg_id
+    return None
+
+
 def _execute_ai_response(chat_id, owner_chat_id, customer_id,
                          system_prompt, user_message, model):
-    """Run AI model call + save chat + send response. Runs in executor thread."""
+    """Run AI model call + save chat + send response with rating. Runs in executor."""
     try:
+        # Check if there's a saved correction matching this question
+        match = find_correction_match(owner_chat_id, user_message)
+        if match:
+            _, corrected_answer = match
+            save_chat(owner_chat_id, customer_id, "user", user_message, model)
+            save_chat(owner_chat_id, customer_id, "agent", corrected_answer, model)
+            _send_with_rate(chat_id, corrected_answer, owner_chat_id, user_message)
+            return
+
         # Inject recent conversation history for context
         history = get_recent_conversation(owner_chat_id, customer_id, limit=HISTORY_LIMIT)
         if history:
@@ -700,7 +735,7 @@ def _execute_ai_response(chat_id, owner_chat_id, customer_id,
 
         save_chat(owner_chat_id, customer_id, "user", user_message, model)
         save_chat(owner_chat_id, customer_id, "agent", response_text, model)
-        tg_send(chat_id, response_text)
+        _send_with_rate(chat_id, response_text, owner_chat_id, user_message)
     except Exception as e:
         log.exception(f"AI executor error: {e}")
         tg_send(chat_id, "❌ Có lỗi xảy ra. Vui lòng thử lại sau.")
@@ -1467,6 +1502,26 @@ def telegram_webhook():
         requests.post(f"{TG_API}/answerCallbackQuery",
                       json={"callback_query_id": cq["id"]}, timeout=5)
 
+        # Rating buttons
+        if data == "rate_ok":
+            owner_id = cq["from"]["id"]
+            msg_id = cq["message"]["message_id"]
+            state = RATING_STATE.pop((chat_id, msg_id), None)
+            if state and state["owner_chat_id"] == owner_id:
+                tg_send(chat_id, "🙌 Cảm ơn anh! Em sẽ cố gắng hơn.")
+            return jsonify({"ok": True})
+        if data == "rate_bad":
+            owner_id = cq["from"]["id"]
+            msg_id = cq["message"]["message_id"]
+            state = RATING_STATE.pop((chat_id, msg_id), None)
+            if state and state["owner_chat_id"] == owner_id:
+                PENDING_CORRECTION[owner_id] = {"question": state["question"]}
+                tg_send(owner_id,
+                    "Dạ, em đã ghi nhận. Anh vui lòng gõ câu trả lời đúng "
+                    f"cho câu hỏi:\n\n*{state['question'][:200]}*\n\n"
+                    "Em sẽ ghi nhớ và dùng câu này cho lần sau ạ 🙏")
+            return jsonify({"ok": True})
+
         if data.startswith("admin_"):
             handle_admin_callback(chat_id, data)
         elif data == "agent_info":
@@ -1620,6 +1675,12 @@ def telegram_webhook():
         handle_catalog(chat_id)
     elif text == "/catalog_clear":
         handle_catalog_clear(chat_id)
+    elif text == "/corrections":
+        count = count_corrections(chat_id)
+        if count:
+            tg_send(chat_id, f"📚 Em đã ghi nhớ *{count} câu* đã được anh sửa.")
+        else:
+            tg_send(chat_id, "Chưa có câu sửa nào. Khi em trả lời chưa đúng, anh bấm 👎 để dạy em nhé!")
     elif text == "/trang_thai":
         handle_trang_thai(chat_id)
     elif text == "/lien_he":
@@ -1633,6 +1694,15 @@ def telegram_webhook():
                 handle_catalog_file(chat_id, doc["file_id"], doc.get("file_name", ""))
             else:
                 tg_send(chat_id, "Vui lòng đăng ký và cài đặt shop trước khi import sản phẩm.")
+            return jsonify({"ok": True})
+        # Pending correction from 👎 rating
+        if chat_id in PENDING_CORRECTION:
+            pc = PENDING_CORRECTION.pop(chat_id)
+            save_correction(chat_id, pc["question"], text)
+            count = count_corrections(chat_id)
+            tg_send(chat_id,
+                f"✅ Đã lưu! Lần sau gặp câu hỏi tương tự em sẽ dùng câu trả lời này.\n"
+                f"📚 Em đang có *{count} câu* đã được anh sửa.")
             return jsonify({"ok": True})
         # Check if user is in agent onboarding
         if chat_id in AGENT_ONBOARD_STATE:
