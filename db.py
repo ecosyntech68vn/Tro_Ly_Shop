@@ -29,6 +29,7 @@ def _sqlite_connect():
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("PRAGMA busy_timeout=5000")
+    c.execute("PRAGMA wal_autocheckpoint=100")  # auto-checkpoint every 100 pages (~400KB)
     return c
 
 
@@ -43,6 +44,7 @@ def _db():
         c.row_factory = sqlite3.Row
         c.execute("PRAGMA journal_mode=WAL")
         c.execute("PRAGMA busy_timeout=5000")
+        c.execute("PRAGMA wal_autocheckpoint=100")
         return c
 
 

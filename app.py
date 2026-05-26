@@ -169,6 +169,35 @@ class DedupSet:
             return False
 
 
+class RateLimiter:
+    """In-memory sliding-window rate limiter. Thread-safe.
+    Ví dụ: 5 requests / 60s — tự cleanup entries cũ."""
+    def __init__(self, max_attempts=5, window=60):
+        self._lock = threading.Lock()
+        self._data = {}
+        self._max = max_attempts
+        self._window = window
+
+    def allow(self, key):
+        with self._lock:
+            now = time.time()
+            cutoff = now - self._window
+            entries = [t for t in self._data.get(key, []) if t > cutoff]
+            if len(entries) >= self._max:
+                return False
+            entries.append(now)
+            self._data[key] = entries
+            # Periodic cleanup stale keys (every ~100 ops)
+            if len(self._data) > 1000:
+                stale = [k for k, v in self._data.items()
+                         if all(t < cutoff for t in v)]
+                for k in stale:
+                    del self._data[k]
+            return True
+
+
+LOGIN_RATE_LIMITER = RateLimiter(max_attempts=5, window=60)
+
 # Rating & Correction state — thread-safe with auto-cleanup
 RATING_STATE = ThreadSafeDict(ttl=300)  # 5 phút là expired
 PENDING_CORRECTION = ThreadSafeDict(ttl=600)  # 10 phút chờ sửa
@@ -1051,10 +1080,15 @@ def handle_catalog_clear(chat_id):
     tg_send(chat_id, "✅ Đã xoá toàn bộ danh mục sản phẩm.")
 
 
-def handle_catalog_file(chat_id, file_id, file_name):
+def handle_catalog_file(chat_id, file_id, file_name, file_size=0):
     """Import products from uploaded CSV or Excel (.xlsx)."""
     if not file_name:
         tg_send(chat_id, "⚠️ File không có tên. Vui lòng gửi lại.")
+        return
+
+    MAX_SIZE = 10 * 1024 * 1024  # 10MB
+    if file_size > MAX_SIZE:
+        tg_send(chat_id, f"⚠️ File quá lớn ({file_size//1024//1024}MB). Tối đa 10MB.")
         return
 
     raw = tg_download_file(file_id)
@@ -1548,6 +1582,9 @@ def _dash_auth():
 @app.route("/dashboard/login", methods=["GET", "POST"])
 def dashboard_login():
     if request.method == "POST":
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
+        if not LOGIN_RATE_LIMITER.allow(f"login:{ip}"):
+            return render_template("dashboard/login.html", error="Quá nhiều lần thử. Vui lòng đợi 1 phút.")
         token = (request.form.get("token") or "").strip()
         if not token:
             return render_template("dashboard/login.html", error="Vui lòng nhập token")
@@ -1928,7 +1965,7 @@ def telegram_webhook():
         if doc:
             sub = get_subscription(chat_id)
             if sub and sub["status"] == "active" and is_onboarding_complete(chat_id):
-                handle_catalog_file(chat_id, doc["file_id"], doc.get("file_name", ""))
+                handle_catalog_file(chat_id, doc["file_id"], doc.get("file_name", ""), doc.get("file_size", 0))
             else:
                 tg_send(chat_id, "Vui lòng đăng ký và cài đặt shop trước khi import sản phẩm.")
             return jsonify({"ok": True})
