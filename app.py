@@ -48,6 +48,8 @@ from agent_db import (
     import_products_from_csv, search_products, get_product_count, clear_products,
     save_correction, find_correction_match, count_corrections,
     create_agent_order, get_shop_orders, update_order_status, get_order_stats,
+    create_appointment, get_shop_appointments, update_appointment_status,
+    SENTIMENT_NEGATIVE,
 )
 
 logging.basicConfig(
@@ -204,6 +206,15 @@ RATING_STATE = ThreadSafeDict(ttl=300)  # 5 phút là expired
 PENDING_CORRECTION = ThreadSafeDict(ttl=600)  # 10 phút chờ sửa
 PROCESSED_UPDATES = DedupSet(ttl=120)  # 2 phút dedup window
 RENEWAL_NOTIFIED = ThreadSafeDict(ttl=86400)  # 1 ngày — tránh spam renewal reminder
+
+
+def detect_negative_sentiment(text):
+    """Quick keyword-based negative sentiment detection for Vietnamese + English."""
+    tl = text.lower()
+    for kw in SENTIMENT_NEGATIVE:
+        if kw in tl:
+            return True
+    return False
 
 # Startup validation
 if not BOT_TOKEN:
@@ -703,6 +714,24 @@ def handle_agent_chat(chat_id, text):
                 pass
         RENEWAL_NOTIFIED.add(chat_id)
 
+    # Sentiment check — nếu khách tức giận, chuyển shop owner
+    if detect_negative_sentiment(text):
+        increment_msg_count(chat_id)
+        save_chat(chat_id, "owner", "user", text, "none")
+        profile_s = get_shop_profile(chat_id)
+        shop_name_s = profile_s.get("shop_name", "Shop") if profile_s else "Shop"
+        tg_send(chat_id,
+            "Em sẽ chuyển shop hỗ trợ anh/chị ngay ạ 🙏\n"
+            "Shop sẽ phản hồi trong thời gian sớm nhất.")
+        tg_send(chat_id,
+            f"⚠️ *Khách hàng phàn nàn*\n*Shop:* {shop_name_s}\n"
+            f"*Nội dung:* {text[:300]}\n"
+            f"👉 Hãy liên hệ khách để giải quyết.",
+            reply_markup={"inline_keyboard": [
+                [{"text": "📋 Dashboard Hội thoại", "callback_data": "agent_dashboard"}]
+            ]})
+        return True
+
     # Build prompt with full context
     profile = get_shop_profile(chat_id)
     sub = get_subscription(chat_id)
@@ -951,6 +980,40 @@ def _execute_ai_response(chat_id, owner_chat_id, customer_id,
                     )
             except Exception as oe:
                 log.warning(f"Order parse error: {oe}")
+
+        # Auto-create appointment from 📅 LỊCH HẸN marker
+        if "📅 LỊCH HẸN" in response_text:
+            try:
+                import re as _re
+                m = _re.search(r"📅 LỊCH HẸN \| (.+)", response_text)
+                if m:
+                    parts = [p.strip() for p in m.group(1).split("|")]
+                    cname = parts[0] if len(parts) > 0 else ""
+                    phone = parts[1] if len(parts) > 1 else ""
+                    service = parts[2] if len(parts) > 2 else ""
+                    adate = parts[3] if len(parts) > 3 else ""
+                    atime = parts[4] if len(parts) > 4 else ""
+                    anote = parts[5] if len(parts) > 5 else ""
+                    apt = create_appointment(owner_chat_id, cname, phone, service, adate, atime, anote)
+                    profile = get_shop_profile(owner_chat_id)
+                    shop_name = profile.get("shop_name", "Shop") if profile else "Shop"
+                    tg_send(owner_chat_id,
+                        f"📅 *Lịch hẹn mới* #{apt['id']}\n"
+                        f"*Shop:* {shop_name}\n"
+                        f"*Khách:* {cname}\n"
+                        f"*SĐT:* {phone}\n"
+                        f"*Dịch vụ:* {service}\n"
+                        f"*Ngày:* {adate} - {atime}\n"
+                        f"*Ghi chú:* {anote}",
+                        reply_markup={
+                            "inline_keyboard": [
+                                [{"text": "✅ Xác nhận", "callback_data": f"appt_confirm_{apt['id']}"}],
+                                [{"text": "❌ Huỷ", "callback_data": f"appt_cancel_{apt['id']}"}],
+                            ]
+                        }
+                    )
+            except Exception as ae:
+                log.warning(f"Appointment parse error: {ae}")
     except Exception as e:
         log.exception(f"AI executor error: {e}")
         tg_send(chat_id, "❌ Có lỗi xảy ra. Vui lòng thử lại sau.")
@@ -1781,6 +1844,28 @@ def dashboard_orders_update():
         update_order_status(int(oid), cid, new_status)
     return redirect(url_for('dashboard_orders'))
 
+@app.route("/dashboard/appointments")
+def dashboard_appointments():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    status = request.args.get("status", "")
+    appts = get_shop_appointments(cid, status=status if status else None, limit=100)
+    return render_template("dashboard/appointments.html", appointments=appts, current_status=status)
+
+@app.route("/dashboard/appointments/update", methods=["POST"])
+def dashboard_appointments_update():
+    cid = _dash_auth()
+    if not cid:
+        return redirect(url_for('dashboard_login'))
+    aid = request.form.get("id", "")
+    action = request.form.get("action", "")
+    status_map = {"confirm": "confirmed", "done": "done", "cancel": "cancelled"}
+    new_status = status_map.get(action)
+    if aid and new_status:
+        update_appointment_status(int(aid), cid, new_status)
+    return redirect(url_for('dashboard_appointments'))
+
 @app.route("/dashboard/catalog/delete", methods=["POST"])
 def dashboard_catalog_delete():
     cid = _dash_auth()
@@ -1959,6 +2044,23 @@ def telegram_webhook():
                 tg_send(chat_id, f"✅ Đơn #{oid} đã giao thành công")
         elif data == "renew_sub":
             handle_agent_renew(chat_id)
+        elif data.startswith("appt_confirm_"):
+            aid = int(data.split("_")[2])
+            if update_appointment_status(aid, chat_id, "confirmed"):
+                tg_send(chat_id, f"✅ Đã xác nhận lịch hẹn #{aid}")
+        elif data.startswith("appt_cancel_"):
+            aid = int(data.split("_")[2])
+            if update_appointment_status(aid, chat_id, "cancelled"):
+                tg_send(chat_id, f"❌ Đã huỷ lịch hẹn #{aid}")
+        elif data == "agent_appointments":
+            appts = get_shop_appointments(chat_id, status="pending", limit=10)
+            if not appts:
+                tg_send(chat_id, "Không có lịch hẹn nào.")
+            else:
+                lines = ["📅 *Lịch hẹn đang chờ:*\n"]
+                for a in appts:
+                    lines.append(f"#{a['id']} {a['customer_name']} — {a['service']} — {a['date']} {a['time']}")
+                tg_send(chat_id, "\n".join(lines))
         elif data.startswith("onboard_"):
             handle_onboard_callback(chat_id, data)
         elif data == "agent_chat_mode":
@@ -2088,6 +2190,17 @@ def telegram_webhook():
                 status_icon = {"pending": "⏳", "confirmed": "✅", "shipped": "🚚", "delivered": "✔️", "cancelled": "❌"}
                 icon = status_icon.get(o["status"], "📄")
                 lines.append(f"{icon} `#{o['id']}` {o['product_name']} — {o['amount']:,}đ — {o['status']}")
+            tg_send(chat_id, "\n".join(lines))
+    elif text in ("/lichhen", "/appointments"):
+        appts = get_shop_appointments(chat_id, limit=20)
+        if not appts:
+            tg_send(chat_id, "Chưa có lịch hẹn nào.")
+        else:
+            lines = ["📅 *Lịch hẹn:*\n"]
+            for a in appts[:10]:
+                status_icon = {"pending": "⏳", "confirmed": "✅", "done": "✔️", "cancelled": "❌"}
+                icon = status_icon.get(a["status"], "📄")
+                lines.append(f"{icon} #{a['id']} {a['customer_name']} — {a['service']} — {a['date']} {a['time']}")
             tg_send(chat_id, "\n".join(lines))
     elif text == "/catalog":
         handle_catalog(chat_id)

@@ -369,6 +369,67 @@ def get_order_stats(owner_chat_id):
     return stats
 
 
+# ========== APPOINTMENT MANAGEMENT ==========
+
+def create_appointment(owner_chat_id, customer_name, phone, service, date, time, note=""):
+    """Create a booking appointment. Returns dict."""
+    now = datetime.utcnow().isoformat()
+    with conn() as c:
+        cur = c.execute(
+            """INSERT INTO agent_appointments(owner_chat_id, customer_name, phone, service, date, time, note, status, created_at)
+               VALUES(?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
+            (owner_chat_id, customer_name, phone, service, date, time, note, now)
+        )
+        return {"id": cur.lastrowid, "status": "pending"}
+
+
+def get_shop_appointments(owner_chat_id, date=None, status=None, limit=50):
+    """Get appointments for a shop."""
+    with conn() as c:
+        if date and status:
+            rows = c.execute(
+                "SELECT * FROM agent_appointments WHERE owner_chat_id=? AND date=? AND status=? ORDER BY time LIMIT ?",
+                (owner_chat_id, date, status, limit)
+            ).fetchall()
+        elif date:
+            rows = c.execute(
+                "SELECT * FROM agent_appointments WHERE owner_chat_id=? AND date=? ORDER BY time LIMIT ?",
+                (owner_chat_id, date, limit)
+            ).fetchall()
+        elif status:
+            rows = c.execute(
+                "SELECT * FROM agent_appointments WHERE owner_chat_id=? AND status=? ORDER BY date DESC, time LIMIT ?",
+                (owner_chat_id, status, limit)
+            ).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT * FROM agent_appointments WHERE owner_chat_id=? ORDER BY date DESC, time LIMIT ?",
+                (owner_chat_id, limit)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_appointment_status(appt_id, owner_chat_id, new_status):
+    """Update appointment status. Returns True if found."""
+    now = datetime.utcnow().isoformat()
+    with conn() as c:
+        cur = c.execute(
+            "UPDATE agent_appointments SET status=?, updated_at=? WHERE id=? AND owner_chat_id=?",
+            (new_status, now, appt_id, owner_chat_id)
+        )
+        return cur.rowcount > 0
+
+
+# ========== SENTIMENT KEYWORDS ==========
+
+SENTIMENT_NEGATIVE = frozenset({
+    "tức", "bực", "khó chịu", "không hài lòng", "thất vọng", "tệ", "kém",
+    "chậm", "lâu quá", "gặp sếp", "khiếu nại", "complaint", "angry",
+    "disappointed", "bad service", "not happy", "poor", "worst",
+    "terrible", "unacceptable", " scam", "lừa", "mất tiền", "đòi lại tiền",
+})
+
+
 def format_products_text(products):
     """Format product list for prompt injection."""
     if not products:
@@ -432,12 +493,17 @@ THÔNG TIN SHOP:
 KIẾN THỨC NGÀNH:
 {industry_knowledge}
 
-HƯỚNG DẪN:
-- Trả lời bằng tiếng Việt tự nhiên
+NGÔN NGỮ:
+- Tự động phát hiện ngôn ngữ của khách hàng
+- Nếu khách nói tiếng Anh → trả lời bằng tiếng Anh
+- Nếu khách nói tiếng Việt → trả lời bằng tiếng Việt tự nhiên
 - Luôn giữ giọng văn phù hợp với shop
+
+HƯỚNG DẪN:
 - Khi được hỏi về sản phẩm, hãy dùng đúng thông tin từ hồ sơ shop
 - Nếu không biết, nói thật là không biết — đừng bịa
-- Kết thúc bằng một câu hỏi hoặc gợi ý nếu phù hợp"""
+- Kết thúc bằng một câu hỏi hoặc gợi ý nếu phù hợp
+- Nếu khách tỏ ra tức giận, khó chịu hoặc khiếu nại (từ khoá: bực, tức, không hài lòng, complaint, angry), hãy giữ thái độ bình tĩnh, xin lỗi và nói "Em sẽ chuyển shop hỗ trợ anh/chị ngay ạ" — KHÔNG tranh luận"""
 
     order_instruction = (
         "\n\nĐẶT HÀNG:\n"
@@ -446,8 +512,15 @@ HƯỚNG DẪN:
         "  🛒 ĐƠN HÀNG | sản phẩm | số lượng | thành tiền | ghi chú | tên, sđt, địa chỉ\n"
         "- Ví dụ: 🛒 ĐƠN HÀNG | Áo thun trắng | 2 | 400000 | Giao giờ hành chính | Nguyễn Văn A, 0909123456, 123 Nguyễn Huệ Q1"
     )
+    schedule_instruction = (
+        "\n\nĐẶT LỊCH HẸN:\n"
+        "- Khi khách muốn đặt lịch hẹn (từ khoá: đặt lịch, hẹn, appointment, book), hãy hỏi: tên, số điện thoại, dịch vụ, ngày, giờ\n"
+        "- Sau khi khách xác nhận, kết thúc tin nhắn bằng dòng:\n"
+        "  📅 LỊCH HẸN | tên | sđt | dịch vụ | ngày | giờ | ghi chú\n"
+        "- Ví dụ: 📅 LỊCH HẸN | Nguyễn Thị B | 0909123456 | Cắt tóc | 2026-06-01 | 14:00 |"
+    )
     system_with_products = _inject_product_context(system, chat_id, user_message)
-    system_with_products += order_instruction
+    system_with_products += order_instruction + schedule_instruction
     return system_with_products, f"{system_with_products}\n\nNgười dùng: {user_message}\n\nTrợ lý:"
 
 
@@ -475,13 +548,18 @@ THÔNG TIN SHOP:
 KIẾN THỨC NGÀNH:
 {industry_knowledge}
 
+NGÔN NGỮ:
+- Tự động phát hiện ngôn ngữ của khách hàng
+- Nếu khách nói tiếng Anh → trả lời bằng tiếng Anh
+- Nếu khách nói tiếng Việt → trả lời bằng tiếng Việt tự nhiên
+
 HƯỚNG DẪN:
-- Trả lời bằng tiếng Việt tự nhiên, thân thiện, lịch sự
 - Xưng hô với khách hàng bằng "bạn", "anh/chị" tuỳ ngữ cảnh
 - Trả lời ngắn gọn, đúng trọng tâm câu hỏi
 - Khi được hỏi về sản phẩm, hãy dùng đúng thông tin từ hồ sơ shop
 - Nếu không biết, nói "em sẽ nhờ shop hỗ trợ thêm ạ"
 - Luôn giữ thái độ hỗ trợ, không tranh luận với khách hàng
+- Nếu khách tỏ ra tức giận (bực, tức, không hài lòng, complaint, angry), hãy giữ bình tĩnh, xin lỗi và nói "Em sẽ chuyển shop hỗ trợ anh/chị ngay ạ"
 - KHÔNG chào hỏi dài dòng — trả lời thẳng câu hỏi"""
 
     order_instruction = (
@@ -491,8 +569,15 @@ HƯỚNG DẪN:
         "  🛒 ĐƠN HÀNG | sản phẩm | số lượng | thành tiền | ghi chú | tên, sđt, địa chỉ\n"
         "- Ví dụ: 🛒 ĐƠN HÀNG | Áo thun trắng | 2 | 400000 | Giao giờ hành chính | Nguyễn Văn A, 0909123456, 123 Nguyễn Huệ Q1"
     )
+    schedule_instruction = (
+        "\n\nĐẶT LỊCH HẸN:\n"
+        "- Khi khách muốn đặt lịch hẹn (từ khoá: đặt lịch, hẹn, appointment, book), hãy hỏi: tên, số điện thoại, dịch vụ, ngày, giờ\n"
+        "- Sau khi khách xác nhận, kết thúc tin nhắn bằng dòng:\n"
+        "  📅 LỊCH HẸN | tên | sđt | dịch vụ | ngày | giờ | ghi chú\n"
+        "- Ví dụ: 📅 LỊCH HẸN | Nguyễn Thị B | 0909123456 | Cắt tóc | 2026-06-01 | 14:00 |"
+    )
     system_with_products = _inject_product_context(system, owner_chat_id, user_message)
-    system_with_products += order_instruction
+    system_with_products += order_instruction + schedule_instruction
     return system_with_products, f"{system_with_products}\n\nKhách hàng ({sender_name}): {user_message}\n\nTrợ lý:"
 
 
@@ -599,6 +684,22 @@ def init_agent_tables():
         );
         CREATE INDEX IF NOT EXISTS idx_agent_orders_owner ON agent_orders(owner_chat_id);
         CREATE INDEX IF NOT EXISTS idx_agent_orders_status ON agent_orders(owner_chat_id, status);
+
+        CREATE TABLE IF NOT EXISTS agent_appointments (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_chat_id INTEGER NOT NULL,
+            customer_name TEXT NOT NULL DEFAULT '',
+            phone         TEXT NOT NULL DEFAULT '',
+            service       TEXT NOT NULL DEFAULT '',
+            date          TEXT NOT NULL DEFAULT '',
+            time          TEXT NOT NULL DEFAULT '',
+            note          TEXT DEFAULT '',
+            status        TEXT NOT NULL DEFAULT 'pending',
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_appointments_owner ON agent_appointments(owner_chat_id);
+        CREATE INDEX IF NOT EXISTS idx_appointments_date ON agent_appointments(owner_chat_id, date);
         """,
         """
         CREATE TABLE IF NOT EXISTS agent_subscriptions (
@@ -694,6 +795,22 @@ def init_agent_tables():
         );
         CREATE INDEX IF NOT EXISTS idx_agent_orders_owner ON agent_orders(owner_chat_id);
         CREATE INDEX IF NOT EXISTS idx_agent_orders_status ON agent_orders(owner_chat_id, status);
+
+        CREATE TABLE IF NOT EXISTS agent_appointments (
+            id            SERIAL PRIMARY KEY,
+            owner_chat_id BIGINT NOT NULL,
+            customer_name TEXT NOT NULL DEFAULT '',
+            phone         TEXT NOT NULL DEFAULT '',
+            service       TEXT NOT NULL DEFAULT '',
+            date          TEXT NOT NULL DEFAULT '',
+            time          TEXT NOT NULL DEFAULT '',
+            note          TEXT DEFAULT '',
+            status        TEXT NOT NULL DEFAULT 'pending',
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_appointments_owner ON agent_appointments(owner_chat_id);
+        CREATE INDEX IF NOT EXISTS idx_appointments_date ON agent_appointments(owner_chat_id, date);
         """
     )
 

@@ -1,0 +1,68 @@
+{% extends "dashboard/layout.html" %}
+{% block content %}
+<div class="header">
+  <h1>📅 Lịch hẹn</h1>
+  <p>Quản lý lịch hẹn từ khách hàng</p>
+</div>
+
+<div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
+  <a href="/dashboard/appointments" class="btn btn-primary btn-sm {% if not current_status %}active{% endif %}">Tất cả</a>
+  <a href="/dashboard/appointments?status=pending" class="btn btn-sm {% if current_status == 'pending' %}btn-primary{% endif %}" style="background:{% if current_status != 'pending' %}#eee;color:#333{% endif %}">⏳ Chờ</a>
+  <a href="/dashboard/appointments?status=confirmed" class="btn btn-sm {% if current_status == 'confirmed' %}btn-primary{% endif %}" style="background:{% if current_status != 'confirmed' %}#eee;color:#333{% endif %}">✅ Đã xác nhận</a>
+  <a href="/dashboard/appointments?status=done" class="btn btn-sm {% if current_status == 'done' %}btn-primary{% endif %}" style="background:{% if current_status != 'done' %}#eee;color:#333{% endif %}">✔️ Đã xong</a>
+  <a href="/dashboard/appointments?status=cancelled" class="btn btn-sm {% if current_status == 'cancelled' %}btn-primary{% endif %}" style="background:{% if current_status != 'cancelled' %}#eee;color:#333{% endif %}">❌ Đã huỷ</a>
+</div>
+
+{% if appointments %}
+<table>
+  <thead>
+    <tr>
+      <th>#</th><th>Khách</th><th>SĐT</th><th>Dịch vụ</th><th>Ngày</th><th>Giờ</th><th>Ghi chú</th><th>Trạng thái</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in appointments %}
+    <tr>
+      <td>{{ a.id }}</td>
+      <td>{{ a.customer_name }}</td>
+      <td>{{ a.phone }}</td>
+      <td>{{ a.service }}</td>
+      <td>{{ a.date }}</td>
+      <td>{{ a.time }}</td>
+      <td class="msg">{{ a.note[:60] }}</td>
+      <td>
+        {% if a.status == 'pending' %}<span class="badge badge-yellow">⏳ Chờ</span>
+        {% elif a.status == 'confirmed' %}<span class="badge badge-green">✅ Đã xác nhận</span>
+        {% elif a.status == 'done' %}<span class="badge badge-green">✔️ Đã xong</span>
+        {% elif a.status == 'cancelled' %}<span class="badge badge-red">❌ Đã huỷ</span>
+        {% endif %}
+      </td>
+      <td style="white-space:nowrap">
+        {% if a.status == 'pending' %}
+        <form method="POST" action="/dashboard/appointments/update" style="display:inline">
+          <input type="hidden" name="id" value="{{ a.id }}">
+          <button name="action" value="confirm" class="btn btn-sm" style="background:#4caf50;color:#fff">✅ Xác nhận</button>
+        </form>
+        <form method="POST" action="/dashboard/appointments/update" style="display:inline">
+          <input type="hidden" name="id" value="{{ a.id }}">
+          <button name="action" value="cancel" class="btn btn-sm btn-danger">Huỷ</button>
+        </form>
+        {% elif a.status == 'confirmed' %}
+        <form method="POST" action="/dashboard/appointments/update" style="display:inline">
+          <input type="hidden" name="id" value="{{ a.id }}">
+          <button name="action" value="done" class="btn btn-sm" style="background:#4caf50;color:#fff">✔️ Đã xong</button>
+        </form>
+        <form method="POST" action="/dashboard/appointments/update" style="display:inline">
+          <input type="hidden" name="id" value="{{ a.id }}">
+          <button name="action" value="cancel" class="btn btn-sm btn-danger">Huỷ</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">Chưa có lịch hẹn nào.</div>
+{% endif %}
+{% endblock %}
